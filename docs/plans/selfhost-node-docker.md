@@ -74,7 +74,7 @@ That person applies the dashboard changes listed in the runbook (T13).
 ## Acceptance criteria
 - AC1 (R1): `git -C /home/mivas/kapsaliscms/repo status --porcelain` is empty and `git -C repo rev-parse HEAD` = `1a342e3…`
   before and after. `git -C sthenos-app log --oneline | wc -l` = 1 after T1. `test ! -e sthenos-app/.lovable`.
-- AC2 (R2): the grep from R2 prints nothing.
+- AC2 (R2): the grep from R2 prints nothing, except exactly the two known-dead `/lovable/email/transactional/send` calls in `src/routes/cancellations.tsx` and `src/routes/profile.tsx` (follow-up F1, deliberately left visible; amended at T10).
 - AC3 (R3): after `npm run build`, `PORT=3000 node .output/server/index.mjs` (env from `.env.example` with dummy values)
   gives `curl -s localhost:3000/api/public/health` = `{"ok":true}` and `curl -s -o /dev/null -w '%{http_code}' localhost:3000/login` = `200`.
 - AC4 (R4): `scripts/tests/stripe-client.test.mjs` proves `createStripeClient("sandbox")` sends its request to host
