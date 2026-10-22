@@ -20,7 +20,7 @@ That person applies the dashboard changes listed in the runbook (T13).
 - D6: The new repo starts with **fresh git history** (one import commit), built from `git archive HEAD`, so no
   past commit or untracked file such as `.env` is carried over.
 - D7: AI moves from the Lovable gateway (Gemini) to the **Anthropic API** (`@anthropic-ai/sdk`, already a
-  dependency). The model comes from env `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`).
+  dependency). The model comes from env `ANTHROPIC_MODEL` (default `claude-opus-5-5`; amended at T8 per the claude-api skill: the default is the current Opus, and downgrading for cost is the user's call via `ANTHROPIC_MODEL`).
 
 ## Baseline (measured on the original repo, 2026-10-22)
 - `npm test` → 12 pass / 0 fail.
@@ -254,7 +254,10 @@ plus `npx eslint <every file touched in the task>`. From T3 on, also run `npm ru
   Before writing code, load the `claude-api` skill and confirm the model id and the `messages.create` params.
   Create `src/lib/sensei-llm.server.ts` (Design). In `src/lib/sensei.functions.ts` around lines 600–710, replace the `LOVABLE_API_KEY` check with `ANTHROPIC_API_KEY`
   ("AI is not configured." when missing) and the fetch with `callSensei({ client: new Anthropic(), model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5", system, messages })`.
-  Drop leading `assistant` messages so the first message is `user`. Use `max_tokens: 1024`. The reply is the joined `text` blocks.
+  Drop leading `assistant` messages so the first message is `user`. Use `max_tokens: 16000` (amended: thinking is always on for Opus 5.5,
+  and 1024 risks truncation). The reply is the joined `text` blocks; thinking blocks are ignored. Use `client.beta.messages.create` with
+  `betas: ["server-side-fallback-2026-06-01"], fallbacks: [{ model: "claude-opus-4-8" }]` (refusal fallback, array form; the installed SDK 0.106 types only the array form, and its header must be the 2026-06-01 one). `stop_reason === "refusal"`
+  → "Sensei can't answer that one." Do not send `thinking`, `temperature` or a prefill.
   Error mapping: `Anthropic.RateLimitError` → "Rate limit hit. Try again in a moment."; any other API error → `AI error (<status>).`;
   thrown network error → "Sensei is unavailable right now.". Remove the "AI credits exhausted…Settings → Workspace" Lovable message.
   Do NOT touch the anonymisation (`ai-aggregate`, `tokeniseNames`) code.
@@ -377,3 +380,4 @@ plus `npx eslint <every file touched in the task>`. From T3 on, also run `npm ru
 - F3: the email-queue worker ignores the error from its `email_send_state` read, so an unreachable DB looks like an empty queue (200). Pre-existing.
 - T10 must also handle these R2 hits found in T7's grep: the `lovable.app` pattern in the redirect allowlist in `src/lib/password-reset.server.ts:9`, and the og:image/twitter:image URLs in `src/routes/__root.tsx:95-96`, which point at a Lovable preview screenshot.
 
+- [x] T8 — src/lib/sensei-llm.server.ts (Anthropic beta.messages.create, default model claude-opus-5-5, max_tokens 16000, refusal fallback array form → claude-opus-4-8 with beta server-side-fallback-2026-06-01, typed error mapping), src/lib/sensei.functions.ts wiring, scripts/tests/sensei-llm.test.mjs (10 tests) (commit 73ed044) — red first (module missing); verified by controller: npm ci 0, npm test 63/63, tsc 0, build 0, security-gate pass, authz 176 (askSensei still guarded), eslint new files 0. Not verified against the live API (no key); first real call should be checked after deploy.
