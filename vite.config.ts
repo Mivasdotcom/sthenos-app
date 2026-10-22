@@ -33,6 +33,6 @@ export default defineConfig({
       "entities/lib/encode.js": path.join(entitiesRoot, "lib/encode.js"),
       entities: entitiesRoot,
     },
-    dedupe: ["react", "react-dom"],
+    dedupe: ["react", "react-dom", "@tanstack/react-query", "@tanstack/query-core"],
   },
 });
