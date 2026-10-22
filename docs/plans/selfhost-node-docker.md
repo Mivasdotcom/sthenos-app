@@ -167,6 +167,10 @@ plus `npx eslint <every file touched in the task>`. From T3 on, also run `npm ru
      `bun.lock`), so `npm ci` fails with ERESOLVE (it resolves `@tanstack/react-start@1.169.3`, which has peerOptional `vite>=8`, against `vite ^7`).
      Fix: change `package.json` `"@tanstack/react-start": "^1.167.50"` → `"~1.168.10"` (the version the original's working node_modules
      runs), then `npm install` (no `--force`/`--legacy-peer-deps`) to regenerate `package-lock.json`, then `npm ci` must succeed.
+     **Refinement (verified in a scratch dir):** that alone still fails `npm ci`, because `@hookform/resolvers@5.9.2` declares ~25 optional
+     peers (ajv, ajv-formats…) and npm's install/ci disagree on them. So also pin `"@hookform/resolvers": "~5.2.2"` (the version in Lovable's
+     `bun.lock`, with only the `react-hook-form` peer). Generate the lock with **npm 10** (`npx -y npm@10.9.4 install`), which is what
+     Node 22 in CI/Docker ships. Verified: `npm ci` then passes with both npm 10.9.4 and npm 11.6.1.
      Commit this as a second commit, "Sync package-lock with package.json", so the import commit stays verbatim.
      AC1 therefore becomes "log has 2 commits after T1".
      **Amendment:** a branch-guard hook forbids edits on `main`, so work happens on `feature/selfhost-node-docker` (created before the
