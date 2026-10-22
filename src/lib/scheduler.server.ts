@@ -106,17 +106,4 @@ export async function recomputeRetentionForAllDojos() {
   return { dojos: results.length, results };
 }
 
-/** Shared apikey check for the public cron hooks. */
-export function authorizeCron(request: Request): boolean {
-  const key =
-    request.headers.get("apikey") ??
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    "";
-  const expected = [
-    process.env.SUPABASE_ANON_KEY,
-    process.env.SUPABASE_PUBLISHABLE_KEY,
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-    process.env.SUPABASE_SERVICE_ROLE_KEY,
-  ].filter(Boolean) as string[];
-  return expected.length > 0 && expected.includes(key);
-}
+export { authorizeCron } from "./cron-auth.server";

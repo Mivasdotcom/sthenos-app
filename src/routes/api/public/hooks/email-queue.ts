@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createFileRoute } from '@tanstack/react-router'
+import { authorizeCron } from '@/lib/cron-auth.server'
 import { sendEmail } from '@/lib/email-provider.server'
 import { PUBLIC_SITE_URL } from '@/lib/site'
 
@@ -60,12 +61,13 @@ async function moveToDlq(
   }
 }
 
-export const Route = createFileRoute("/lovable/email/queue/process")({
+export const Route = createFileRoute("/api/public/hooks/email-queue")({
   server: {
     handlers: {
       POST: async ({ request }) => {
         const apiKey = process.env['RESEND_API_KEY']
-        const supabaseUrl = import.meta.env['VITE_SUPABASE_URL']
+        const supabaseUrl = process.env['SUPABASE_URL']
+        // Needed only to build the admin client below, never to authorise the caller.
         const supabaseServiceKey = process.env['SUPABASE_SERVICE_ROLE_KEY']
 
         if (!apiKey || !supabaseUrl || !supabaseServiceKey) {
@@ -76,16 +78,9 @@ export const Route = createFileRoute("/lovable/email/queue/process")({
           )
         }
 
-        // Verify the caller is authorized with the service role key.
-        // In the TanStack stack, the pg_cron job sends the service role key as a Bearer token.
-        const authHeader = request.headers.get('Authorization')
-        if (!authHeader?.startsWith('Bearer ')) {
+        // Only the dedicated CRON_SECRET (Bearer) authorises the pg_cron caller.
+        if (!authorizeCron(request)) {
           return Response.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-
-        const token = authHeader.slice('Bearer '.length).trim()
-        if (token !== supabaseServiceKey) {
-          return Response.json({ error: 'Forbidden' }, { status: 403 })
         }
 
         const supabase: SupabaseClient<any, any> = createClient(supabaseUrl, supabaseServiceKey)
