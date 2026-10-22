@@ -191,9 +191,9 @@ Rules for `.env`:
 
 - Write `KEY=value` with no surrounding quotes. `.env.example` shows `KEY=""`
   as a placeholder; do not copy the quotes.
-- Set `NODE_ENV=production` and `PORT=3000` explicitly. Do not leave them empty.
-  An empty `NODE_ENV` overrides the image's `production` default, and the app
-  then uses the sandbox Stripe key.
+- Do NOT put `NODE_ENV` or `PORT` in `.env`. The image sets `NODE_ENV=production`
+  and `PORT=3000`. A value in `.env` overrides them: an empty `NODE_ENV` makes the
+  app use the sandbox Stripe key in production.
 - `.env` is the only copy of the runtime secrets on the server. Keep a copy in
   your password manager. It is never committed to git.
 
@@ -285,13 +285,13 @@ says which of three places it is set:
 | `SEND_EMAIL_HOOK_SECRET` | server `.env` | Generated in Supabase → Authentication → Hooks → Send Email (section 6c). Format `v1,whsec_…`. Copy it exactly. | Yes |
 | `CRON_SECRET` | server `.env` **and** Supabase Vault (section 6e) | Generate with `openssl rand -hex 32`. At least 16 characters. Must be identical on both sides. | Yes |
 | `ANTHROPIC_API_KEY` | server `.env` | Anthropic Console → API keys | Yes, for Sensei AI |
-| `ANTHROPIC_MODEL` | server `.env` | Model name. Default if unset: `claude-opus-5-5`. | No |
+| `ANTHROPIC_MODEL` | server `.env` | Default model `claude-opus-5-5`. On a safety refusal the API retries on `claude-opus-4-8`. | No |
 | `APP_URL` | server `.env` | `https://<APP_DOMAIN>`. Used for redirects and links, and takes precedence over `SITE_URL`. | Recommended |
 | `SITE_URL` | server `.env` | Fallback origin when `APP_URL` is unset. Set it to the same value. | No (if `APP_URL` is set) |
 | `CANONICAL_HOST` | server `.env` | The apex host, e.g. `<APP_DOMAIN>`, for the `www` redirect. Leave unset until the Caddyfile serves `www` (section 3). | No |
 | `TURNSTILE_SECRET_KEY` | server `.env` | Cloudflare dashboard → Turnstile → your widget → Secret key. Unset disables the bot check on public forms. | Required before go-live (section 12) |
-| `PORT` | server `.env` | `3000`. The image default is 3000; Caddy proxies to `app:3000`. | Yes, set it to `3000` |
-| `NODE_ENV` | server `.env` | `production`. Anything else selects sandbox Stripe. | Yes, set it to `production` |
+| `PORT` | set by the image (`3000`); do NOT put it in `.env` | Caddy proxies to `app:3000`. Overriding it in `.env` breaks the proxy. | Set by image |
+| `NODE_ENV` | set by the image (`production`); do NOT put it in `.env` | Set by the image. Any other value in `.env` selects sandbox Stripe. | Set by image |
 | `APP_DOMAIN` | server `.env` (compose reads it for Caddy) | The bare domain, e.g. `<APP_DOMAIN>`. Compose refuses to start without it. | Yes |
 | `IMAGE_TAG` | compose shell (CI sets it; manual deploys set it) | The git commit SHA of the image to run. Default `latest`. | Manual deploys: yes |
 | `GHCR_OWNER` | compose shell (CI sets it; manual deploys set it) | The GitHub owner in lowercase, e.g. `<owner-lowercase>`. Default `local`, which will not pull. | Manual deploys: yes |
@@ -812,5 +812,5 @@ These are open items. Do not treat the site as launched until each is decided.
   and Anthropic. Resend and Anthropic process data in the United States.
 - **Turnstile**: set `TURNSTILE_SECRET_KEY` for the captcha on public forms.
   Without it the check is disabled.
-- **www**: `deploy/Caddyfile` serves only `{$APP_DOMAIN}`, so a `www` record and
+- **F5**: `deploy/Caddyfile` serves only `{$APP_DOMAIN}`, so a `www` record and
   `CANONICAL_HOST` do not work yet (section 3).

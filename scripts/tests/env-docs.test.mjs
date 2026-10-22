@@ -44,6 +44,18 @@ test("deploy/README.md documents every variable in .env.example", () => {
   );
 });
 
+test(".env.example does not define NODE_ENV or PORT (the image sets them)", () => {
+  // An empty NODE_ENV in .env overrides the image's production default and makes
+  // getStripeEnv() pick sandbox Stripe keys in production.
+  const names = envExampleNames();
+  const defined = ["NODE_ENV", "PORT"].filter((name) => names.includes(name));
+  assert.deepEqual(
+    defined,
+    [],
+    `.env.example must not define ${defined.join(", ")}: the Dockerfile sets them and a server .env must not override them`,
+  );
+});
+
 test(".env.example has no non-empty values (no committed secrets)", () => {
   // Empty placeholders are written as KEY="" and are allowed; anything else is a value.
   const withValue = /^[A-Z0-9_]+=(?!""\s*$)\S/m;
