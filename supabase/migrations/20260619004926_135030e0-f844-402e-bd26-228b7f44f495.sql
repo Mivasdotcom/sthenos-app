@@ -1,0 +1,1 @@
+ALTER TYPE public.dojo_role ADD VALUE 'owner';

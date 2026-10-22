@@ -1,0 +1,1 @@
+UPDATE public.classes SET weekday = (weekday + 1) % 7;

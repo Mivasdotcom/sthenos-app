@@ -1,0 +1,1 @@
+ALTER TABLE public.members ADD COLUMN IF NOT EXISTS last_invited_at timestamptz;

@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.link_member_on_profile_insert() FROM PUBLIC, anon, authenticated;

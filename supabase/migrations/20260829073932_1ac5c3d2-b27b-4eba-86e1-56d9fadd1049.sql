@@ -1,0 +1,1 @@
+GRANT SELECT (trial_length_days, trial_classes_per_day, trial_max_total_classes) ON public.dojos TO authenticated;

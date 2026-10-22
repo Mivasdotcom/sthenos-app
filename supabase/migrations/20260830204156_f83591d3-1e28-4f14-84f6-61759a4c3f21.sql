@@ -1,0 +1,1 @@
+GRANT UPDATE (partner_matching_enabled) ON public.dojos TO authenticated;

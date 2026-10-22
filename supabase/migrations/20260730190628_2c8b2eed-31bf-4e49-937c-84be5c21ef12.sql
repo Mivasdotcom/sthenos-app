@@ -1,0 +1,2 @@
+UPDATE public.dojo_memberships SET role = 'member'::public.dojo_role WHERE role = 'pending'::public.dojo_role;
+UPDATE public.members SET status = 'active'::public.member_status, updated_at = now() WHERE status = 'pending'::public.member_status;

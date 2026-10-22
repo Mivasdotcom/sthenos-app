@@ -1,0 +1,2 @@
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS payment_method text;
+COMMENT ON COLUMN public.invoices.payment_method IS 'Actual Stripe payment method type used (card, sepa_debit, bacs_debit); resolved from the charge/payment intent, never from the offered list.';

@@ -1,0 +1,1 @@
+GRANT UPDATE (privacy_contact_email) ON public.dojos TO authenticated;

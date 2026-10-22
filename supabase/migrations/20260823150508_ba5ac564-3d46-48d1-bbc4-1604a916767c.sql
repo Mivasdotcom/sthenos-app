@@ -1,0 +1,2 @@
+GRANT SELECT (logo_path) ON public.dojos TO anon, authenticated;
+GRANT SELECT (billing_day_of_month, timezone, price_change_notice_days, paused_members_can_book, stripe_charges_enabled, stripe_details_submitted, stripe_account_country) ON public.dojos TO authenticated;

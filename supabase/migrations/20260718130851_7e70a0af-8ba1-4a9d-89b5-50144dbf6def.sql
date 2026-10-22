@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "authenticated users can create dojo" ON public.dojos;

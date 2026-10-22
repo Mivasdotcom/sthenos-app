@@ -1,0 +1,189 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --font-sans: 'Hind', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Archivo Black', 'Hind', sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-tint: var(--brand-tint);
+  --color-charcoal: var(--charcoal);
+  --color-charcoal-raised: var(--charcoal-raised);
+  --color-surface: var(--surface);
+
+
+  --color-belt-white: var(--belt-white);
+  --color-belt-blue: var(--belt-blue);
+  --color-belt-purple: var(--belt-purple);
+  --color-belt-brown: var(--belt-brown);
+  --color-belt-black: var(--belt-black);
+  --color-belt-yellow: var(--belt-yellow);
+  --color-belt-orange: var(--belt-orange);
+  --color-belt-green: var(--belt-green);
+  --color-belt-red: var(--belt-red);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.75rem;
+
+  /* Earthy beige canvas */
+  --background: oklch(0.945 0.016 78);
+  --foreground: oklch(0.22 0.012 58);
+  --surface: oklch(0.918 0.019 78);
+
+  --card: oklch(0.985 0.008 82);
+  --card-foreground: oklch(0.22 0.012 58);
+  --popover: oklch(0.985 0.008 82);
+  --popover-foreground: oklch(0.22 0.012 58);
+
+  /* Deep orange primary (AA on white text) */
+  --primary: oklch(0.55 0.17 42);
+  --primary-foreground: oklch(0.99 0.012 84);
+
+  --secondary: oklch(0.9 0.02 78);
+  --secondary-foreground: oklch(0.22 0.012 58);
+
+  --muted: oklch(0.908 0.018 78);
+  --muted-foreground: oklch(0.48 0.02 62);
+
+  --accent: oklch(0.945 0.038 66);        /* warm orange tint */
+  --accent-foreground: oklch(0.42 0.14 42);
+
+  --brand: oklch(0.55 0.17 42);           /* deep orange, AA with white text */
+  --brand-foreground: oklch(0.99 0.012 84);
+  --brand-strong: oklch(0.63 0.19 44);
+  --brand-tint: oklch(0.945 0.038 66);
+
+  --charcoal: oklch(0.2 0.014 52);        /* warm charcoal */
+  --charcoal-raised: oklch(0.26 0.016 52);
+
+  --destructive: oklch(0.52 0.21 20);
+  --destructive-foreground: oklch(0.985 0.006 84);
+
+  --border: oklch(0.872 0.022 78);
+  --input: oklch(0.872 0.022 78);
+  --ring: oklch(0.63 0.19 44);
+
+  /* Belt rank colors */
+  --belt-white: oklch(0.97 0.003 247);
+  --belt-yellow: oklch(0.85 0.16 90);
+  --belt-orange: oklch(0.72 0.18 55);
+  --belt-green: oklch(0.55 0.14 150);
+  --belt-blue: oklch(0.5 0.18 260);
+  --belt-purple: oklch(0.45 0.17 305);
+  --belt-brown: oklch(0.42 0.08 60);
+  --belt-red: oklch(0.5 0.2 25);
+  --belt-black: oklch(0.18 0.01 264);
+
+  /* Clay sidebar, a step down from the beige canvas */
+  --sidebar: oklch(0.845 0.03 76);
+  --sidebar-foreground: oklch(0.27 0.018 58);
+  --sidebar-primary: oklch(0.52 0.17 42);
+  --sidebar-primary-foreground: oklch(0.99 0.012 84);
+  --sidebar-accent: oklch(0.985 0.008 82);
+  --sidebar-accent-foreground: oklch(0.48 0.16 42);
+  --sidebar-border: oklch(0.795 0.032 76);
+  --sidebar-ring: oklch(0.52 0.17 42);
+
+  --chart-1: oklch(0.63 0.19 44);
+  --chart-2: oklch(0.5 0.18 260);
+  --chart-3: oklch(0.45 0.17 305);
+  --chart-4: oklch(0.74 0.17 50);
+  --chart-5: oklch(0.55 0.14 150);
+}
+
+
+.dark {
+  --background: oklch(0.19 0.014 52);
+  --foreground: oklch(0.96 0.008 82);
+  --surface: oklch(0.25 0.016 52);
+  --card: oklch(0.25 0.016 52);
+  --card-foreground: oklch(0.96 0.008 82);
+  --popover: oklch(0.25 0.016 52);
+  --popover-foreground: oklch(0.96 0.008 82);
+  --primary: oklch(0.74 0.17 50);
+  --primary-foreground: oklch(0.2 0.03 52);
+  --secondary: oklch(0.29 0.018 52);
+  --secondary-foreground: oklch(0.96 0.008 82);
+  --muted: oklch(0.29 0.018 52);
+  --muted-foreground: oklch(0.73 0.016 62);
+  --accent: oklch(0.31 0.042 52);
+  --accent-foreground: oklch(0.9 0.08 66);
+  --brand: oklch(0.74 0.17 50);
+  --brand-foreground: oklch(0.2 0.03 52);
+  --brand-strong: oklch(0.79 0.16 54);
+  --brand-tint: oklch(0.31 0.042 52);
+  --charcoal: oklch(0.19 0.014 52);
+  --charcoal-raised: oklch(0.25 0.016 52);
+  --destructive: oklch(0.6 0.2 22);
+  --destructive-foreground: oklch(0.97 0.006 84);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.74 0.17 50);
+  --sidebar: oklch(0.155 0.012 52);
+  --sidebar-foreground: oklch(0.96 0.008 82);
+  --sidebar-primary: oklch(0.76 0.17 52);
+  --sidebar-primary-foreground: oklch(0.18 0.03 52);
+  --sidebar-accent: oklch(0.26 0.016 52);
+  --sidebar-accent-foreground: oklch(0.97 0.008 82);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.76 0.17 52);
+
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    font-weight: 400; /* Archivo Black is already heavy */
+  }
+}
