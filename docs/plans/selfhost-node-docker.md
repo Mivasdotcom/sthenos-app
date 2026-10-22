@@ -1,5 +1,5 @@
 # Feature: selfhost-node-docker
-Status: IMPLEMENTING
+Status: IMPLEMENTED
 Note (2026-10-22): /check-feasibility was skipped at the user's explicit request. T3 is where the riskiest
 assumptions (Nitro entry, node-server preset) get tested first.
 
@@ -74,7 +74,7 @@ That person applies the dashboard changes listed in the runbook (T13).
 ## Acceptance criteria
 - AC1 (R1): `git -C /home/mivas/kapsaliscms/repo status --porcelain` is empty and `git -C repo rev-parse HEAD` = `1a342e3…`
   before and after. `git -C sthenos-app log --oneline | wc -l` = 1 after T1. `test ! -e sthenos-app/.lovable`.
-- AC2 (R2): the grep from R2 prints nothing, except exactly the two known-dead `/lovable/email/transactional/send` calls in `src/routes/cancellations.tsx` and `src/routes/profile.tsx` (follow-up F1, deliberately left visible; amended at T10). Lines in `scripts/tests/*.test.mjs` that assert Lovable is ABSENT (regression guards) are also allowed.
+- AC2 (R2): the grep from R2 prints nothing, except exactly the two known-dead `/lovable/email/transactional/send` calls in `src/routes/cancellations.tsx` and `src/routes/profile.tsx` (follow-up F1, deliberately left visible; amended at T10). Lines in `scripts/tests/*.test.mjs` that assert Lovable is ABSENT (regression guards) are also allowed. Migration instructions in `deploy/README.md` and `deploy/supabase/repoint-cron.sql` that name the old Lovable setup to be removed are also allowed (amended at T14).
 - AC3 (R3): after `npm run build`, `PORT=3000 node .output/server/index.mjs` (env from `.env.example` with dummy values)
   gives `curl -s localhost:3000/api/public/health` = `{"ok":true}` and `curl -s -o /dev/null -w '%{http_code}' localhost:3000/login` = `200`.
 - AC4 (R4): `scripts/tests/stripe-client.test.mjs` proves `createStripeClient("sandbox")` sends its request to host
@@ -388,3 +388,8 @@ plus `npx eslint <every file touched in the task>`. From T3 on, also run `npm ru
 - [x] T12 — .github/workflows/ci.yml (replaces security-gate.yml): jobs security-gate, test (now with npm ci), authorisation, typecheck, build → image (GHCR push on main, owner lowercased, fails fast if VITE_* repo variables are unset) → deploy (gated by `vars.DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main'`, appleboy/ssh-action to /opt/sthenos); every action pinned to a full SHA (commits 0f432f5, c3ff13e) — verified by controller: actionlint exit 0 (with shellcheck); all 6 SHAs re-resolved against GitHub tags and matching. Agent ran every check job's commands in a clean worktree (all exit 0). Not yet run on GitHub (no remote).
 - [x] T13 — deploy/README.md (12-section runbook incl. Supabase-owner checklist, Stripe event lists, follow-ups F1–F5), deploy/supabase/repoint-cron.sql (vault-backed CRON_SECRET, psql -v vars, no secrets or defaults), CLAUDE.md, scripts/tests/env-docs.test.mjs (4 tests); NODE_ENV/PORT removed from .env.example (an empty NODE_ENV would have selected Stripe sandbox in prod) (commits 6158929, 8cf52ac) — env-docs tests red first (README missing; NODE_ENV/PORT present). Agent verified the SQL on supabase/postgres:15.19.0.006 (pg_cron 1.6.4, pg_net 0.20.4, vault 0.3.1): idempotent on re-run, enforce-overdue-grace untouched, secret absent from cron.job and from the file, rotation updates in place. Hosted Supabase versions not checked.
 - F5: Caddy serves only APP_DOMAIN (no www cert), so the CANONICAL_HOST redirect can't be reached until a `www.{$APP_DOMAIN}` site block is added. The runbook says to skip www for now.
+- [x] T14 — final verification by the controller in a clean `git worktree` of e5c216a: `npm ci` 0; security-gate pass; `npm test` 80/80; authorisation-gate 176 guarded; `tsc` 0; `npm run build` 0 (preset node-server); eslint on all 14 new .ts/.mjs files + rewritten vite.config.ts/server.ts 0 errors; AC2 only allowed hits; AC9 empty; AC10 3 lines; AC1 original repo clean at 1a342e3, no `.env`/`.lovable` in the new repo; actionlint 0. Worktree removed. Docker (AC11) verified at T11; Dockerfile/compose unchanged since.
+
+## Implementation summary
+14/14 tasks done on `feature/selfhost-node-docker` (`main` = verbatim import 42df455). Not verifiable here (needs real keys/infra): Google OAuth click-through, a live Anthropic call, the Resend send, the Supabase hook/cron against hosted Supabase, the GitHub Actions run + GHCR push, and the Hetzner deploy. All are in the deploy/README.md runbook.
+
