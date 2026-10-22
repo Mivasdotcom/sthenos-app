@@ -49,6 +49,7 @@ import { Route as SettingsAgreementsRouteImport } from './routes/settings.agreem
 import { Route as MembersMemberIdRouteImport } from './routes/members.$memberId'
 import { Route as JSlugSignupRouteImport } from './routes/j.$slug.signup'
 import { Route as JSlugPrivacyRouteImport } from './routes/j.$slug.privacy'
+import { Route as ApiPublicHealthRouteImport } from './routes/api/public/health'
 import { Route as LovableEmailQueueProcessRouteImport } from './routes/lovable/email/queue/process'
 import { Route as LovableEmailAuthWebhookRouteImport } from './routes/lovable/email/auth/webhook'
 import { Route as ApiPublicStripeConnectWebhookRouteImport } from './routes/api/public/stripe/connect-webhook'
@@ -257,6 +258,11 @@ const JSlugPrivacyRoute = JSlugPrivacyRouteImport.update({
   path: '/j/$slug/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHealthRoute = ApiPublicHealthRouteImport.update({
+  id: '/api/public/health',
+  path: '/api/public/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LovableEmailQueueProcessRoute =
   LovableEmailQueueProcessRouteImport.update({
     id: '/lovable/email/queue/process',
@@ -338,6 +344,7 @@ export interface FileRoutesByFullPath {
   '/settings/waiver-templates': typeof SettingsWaiverTemplatesRoute
   '/members/': typeof MembersIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/api/public/health': typeof ApiPublicHealthRoute
   '/j/$slug/privacy': typeof JSlugPrivacyRoute
   '/j/$slug/signup': typeof JSlugSignupRoute
   '/api/public/hooks/membership-nightly': typeof ApiPublicHooksMembershipNightlyRoute
@@ -385,6 +392,7 @@ export interface FileRoutesByTo {
   '/settings/waiver-templates': typeof SettingsWaiverTemplatesRoute
   '/members': typeof MembersIndexRoute
   '/settings': typeof SettingsIndexRoute
+  '/api/public/health': typeof ApiPublicHealthRoute
   '/j/$slug/privacy': typeof JSlugPrivacyRoute
   '/j/$slug/signup': typeof JSlugSignupRoute
   '/api/public/hooks/membership-nightly': typeof ApiPublicHooksMembershipNightlyRoute
@@ -435,6 +443,7 @@ export interface FileRoutesById {
   '/settings/waiver-templates': typeof SettingsWaiverTemplatesRoute
   '/members/': typeof MembersIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/api/public/health': typeof ApiPublicHealthRoute
   '/j/$slug/privacy': typeof JSlugPrivacyRoute
   '/j/$slug/signup': typeof JSlugSignupRoute
   '/api/public/hooks/membership-nightly': typeof ApiPublicHooksMembershipNightlyRoute
@@ -486,6 +495,7 @@ export interface FileRouteTypes {
     | '/settings/waiver-templates'
     | '/members/'
     | '/settings/'
+    | '/api/public/health'
     | '/j/$slug/privacy'
     | '/j/$slug/signup'
     | '/api/public/hooks/membership-nightly'
@@ -533,6 +543,7 @@ export interface FileRouteTypes {
     | '/settings/waiver-templates'
     | '/members'
     | '/settings'
+    | '/api/public/health'
     | '/j/$slug/privacy'
     | '/j/$slug/signup'
     | '/api/public/hooks/membership-nightly'
@@ -582,6 +593,7 @@ export interface FileRouteTypes {
     | '/settings/waiver-templates'
     | '/members/'
     | '/settings/'
+    | '/api/public/health'
     | '/j/$slug/privacy'
     | '/j/$slug/signup'
     | '/api/public/hooks/membership-nightly'
@@ -621,6 +633,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   UnsubscribeRoute: typeof UnsubscribeRoute
   WorkflowsRoute: typeof WorkflowsRoute
+  ApiPublicHealthRoute: typeof ApiPublicHealthRoute
   JSlugPrivacyRoute: typeof JSlugPrivacyRoute
   JSlugSignupRoute: typeof JSlugSignupRoute
   ApiPublicHooksMembershipNightlyRoute: typeof ApiPublicHooksMembershipNightlyRoute
@@ -914,6 +927,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JSlugPrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/health': {
+      id: '/api/public/health'
+      path: '/api/public/health'
+      fullPath: '/api/public/health'
+      preLoaderRoute: typeof ApiPublicHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/lovable/email/queue/process': {
       id: '/lovable/email/queue/process'
       path: '/lovable/email/queue/process'
@@ -1035,6 +1055,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   UnsubscribeRoute: UnsubscribeRoute,
   WorkflowsRoute: WorkflowsRoute,
+  ApiPublicHealthRoute: ApiPublicHealthRoute,
   JSlugPrivacyRoute: JSlugPrivacyRoute,
   JSlugSignupRoute: JSlugSignupRoute,
   ApiPublicHooksMembershipNightlyRoute: ApiPublicHooksMembershipNightlyRoute,

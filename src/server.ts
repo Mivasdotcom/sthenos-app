@@ -83,7 +83,7 @@ function canonicalHostRedirect(request: Request): Response | null {
 }
 
 export default {
-  async fetch(request: Request, env: unknown, ctx: unknown) {
+  async fetch(request: Request, env?: unknown, ctx?: unknown) {
     try {
       const redirected = canonicalHostRedirect(request);
       if (redirected) return redirected;
