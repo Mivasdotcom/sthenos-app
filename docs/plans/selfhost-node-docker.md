@@ -34,8 +34,10 @@ That person applies the dashboard changes listed in the runbook (T13).
 ## Requirements
 - R1: The new repo exists at `/home/mivas/kapsaliscms/sthenos-app` with its own git history, holds every
   tracked file of the original at HEAD except `.lovable/`, and the original repo stays byte-identical (`git -C repo status` empty, HEAD unchanged).
-- R2: No source, config or lockfile in the new repo references Lovable or Cloudflare:
-  `grep -rniE "lovable|wrangler|cloudflare" --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=docs .` returns nothing.
+- R2: No source or config file in the new repo references Lovable, or Cloudflare as a build/hosting target:
+  `grep -rniE "lovable|wrangler|cloudflare" --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=docs --exclude=package-lock.json . | grep -viE "turnstile|challenges\.cloudflare\.com"`
+  returns nothing. (Amended during T3: `package-lock.json` legitimately lists `wrangler`/`@cloudflare/*` as optional peers of
+  nitro → env-runner, and Cloudflare **Turnstile** (signup captcha in `rate-limit.server.ts`, `TurnstileWidget.tsx`) is a runtime service that stays.)
 - R3: `npm run build` produces a Node server at `.output/server/index.mjs`. Running it with `node` serves the
   app's HTML on `/` and `{"ok":true}` on `GET /api/public/health`.
 - R4: Platform Stripe billing (`stripe.server.ts`) talks to `https://api.stripe.com` directly with the real secret
@@ -68,7 +70,7 @@ That person applies the dashboard changes listed in the runbook (T13).
 ## Acceptance criteria
 - AC1 (R1): `git -C /home/mivas/kapsaliscms/repo status --porcelain` is empty and `git -C repo rev-parse HEAD` = `1a342e3…`
   before and after. `git -C sthenos-app log --oneline | wc -l` = 1 after T1. `test ! -e sthenos-app/.lovable`.
-- AC2 (R2): the grep from R2 prints nothing (exit 1).
+- AC2 (R2): the grep from R2 prints nothing.
 - AC3 (R3): after `npm run build`, `PORT=3000 node .output/server/index.mjs` (env from `.env.example` with dummy values)
   gives `curl -s localhost:3000/api/public/health` = `{"ok":true}` and `curl -s -o /dev/null -w '%{http_code}' localhost:3000/login` = `200`.
 - AC4 (R4): `scripts/tests/stripe-client.test.mjs` proves `createStripeClient("sandbox")` sends its request to host
@@ -357,3 +359,4 @@ plus `npx eslint <every file touched in the task>`. From T3 on, also run `npm ru
 ## Progress
 - [x] T1 — new repo at sthenos-app (commits 42df455 import, 192389c lock sync; `.env` excluded; pins `@hookform/resolvers ~5.2.2`, `@tanstack/react-start ~1.168.10`) — verified by controller: `npm ci` exit 0, security-gate pass, `npm test` 12/12, authorisation-gate 176 guarded, `tsc` exit 0, original repo clean at 1a342e3.
 - [x] T2 — deleted src/routes/{mcp.ts,[.mcp]/,[.well-known]/oauth-protected-resource.ts,[.]lovable.oauth.consent.tsx,lovable/email/auth/preview.ts}, src/lib/mcp/; vite.config.ts; package.json/lock; routeTree.gen.ts (commit 9e7458e) — verified by controller: npm ci 0, security-gate pass, npm test 12/12, authz 176 guarded, tsc 0, eslint vite.config.ts 0, AC9 `mcp` grep empty.
+- [x] T3 — vite.config.ts (plain Vite + nitro node-server; react/react-query dedupe), src/server.ts (optional env/ctx), src/routes/api/public/health.ts, package.json `start`, removed wrangler.jsonc/bun.lock/bunfig.toml/.gitignore wrangler lines (commits dc12c7a, 79667dc) — verified by controller: clean `npm ci` + `npm run build` exit 0, `.output/nitro.json` preset node-server, `node .output/server/index.mjs` → health `{"ok":true}`, `/` 200, `/login` 200 (after router's 307 search-param normalisation), `/mcp` 404; security-gate pass, test 12/12, authz 176, tsc 0, eslint on new/rewritten files 0. Known: src/server.ts has 3 pre-existing prettier errors (lines 15, 82, 99) → fix in T10.
