@@ -45,6 +45,10 @@ That person applies the dashboard changes listed in the runbook (T13).
 - R5: All outgoing email (transactional sends and the pgmq queue worker) goes through one Resend adapter,
   `src/lib/email-provider.server.ts`. It keeps the existing behaviour for 429 (retry with Retry-After), 403
   (dead-letter queue) and "domain not verified", and sets `List-Unsubscribe` headers when an unsubscribe token is given.
+  **Amendment (found in T5):** Lovable's API also appended exactly ONE visible footer to every send ("You received this email
+  because of an action on <from display name>" + an Unsubscribe link built from the token). The app relies on that (see the
+  "SINGLE FOOTER" comment in `email-send.server.ts`). Resend adds none, so the adapter appends that single footer (HTML + text)
+  whenever `unsubscribeUrl` is given. The display name is HTML-escaped.
 - R6: Supabase auth emails come from a **Supabase Send Email Hook** at `POST /api/public/hooks/auth-email`.
   The hook verifies the Standard Webhooks signature against `SEND_EMAIL_HOOK_SECRET`, renders the existing
   React Email templates and enqueues to `auth_emails` as today.
@@ -211,6 +215,8 @@ plus `npx eslint <every file touched in the task>`. From T3 on, also run `npm ru
   Show the test FAILING on the T3 commit first (gateway host) and passing after.
 
 - **T5 (R5): Resend adapter.**
+  **Amendment:** do NOT uninstall `@lovable.dev/email-js` in T5, because `src/routes/lovable/email/auth/webhook.ts` still imports
+  `parseEmailWebhookPayload` from it. T6 removes that import and uninstalls the package.
   Create `src/lib/email-provider.server.ts` (Design). Replace `sendLovableEmail` in `src/lib/email-send.server.ts` (around line 645) and in
   the queue worker with `sendEmail`. Map: `to, from, subject, html, text, replyTo, idempotencyKey, unsubscribeToken`,
   plus `tags` from `label`/`purpose`. When `unsubscribeToken` is set, set headers `List-Unsubscribe: <${PUBLIC_SITE_URL}/unsubscribe?token=${token}>`
@@ -361,3 +367,4 @@ plus `npx eslint <every file touched in the task>`. From T3 on, also run `npm ru
 - [x] T2 — deleted src/routes/{mcp.ts,[.mcp]/,[.well-known]/oauth-protected-resource.ts,[.]lovable.oauth.consent.tsx,lovable/email/auth/preview.ts}, src/lib/mcp/; vite.config.ts; package.json/lock; routeTree.gen.ts (commit 9e7458e) — verified by controller: npm ci 0, security-gate pass, npm test 12/12, authz 176 guarded, tsc 0, eslint vite.config.ts 0, AC9 `mcp` grep empty.
 - [x] T3 — vite.config.ts (plain Vite + nitro node-server; react/react-query dedupe), src/server.ts (optional env/ctx), src/routes/api/public/health.ts, package.json `start`, removed wrangler.jsonc/bun.lock/bunfig.toml/.gitignore wrangler lines (commits dc12c7a, 79667dc) — verified by controller: clean `npm ci` + `npm run build` exit 0, `.output/nitro.json` preset node-server, `node .output/server/index.mjs` → health `{"ok":true}`, `/` 200, `/login` 200 (after router's 307 search-param normalisation), `/mcp` 404; security-gate pass, test 12/12, authz 176, tsc 0, eslint on new/rewritten files 0. Known: src/server.ts has 3 pre-existing prettier errors (lines 15, 82, 99) → fix in T10.
 - [x] T4 — src/lib/stripe.server.ts (direct `new Stripe(key, {httpClient: createFetchHttpClient()})`, gateway removed), scripts/tests/stripe-client.test.mjs (2 tests) — verified by controller: test fails on pre-change code with LOVABLE_API_KEY set (`actual: 'connector-gateway.lovable.dev', expected: 'api.stripe.com'`), passes after; npm test 14/14, tsc 0, security-gate pass, authz 176. Pre-existing lint in stripe.server.ts (`as any` apiVersion, prettier line 24) left as is.
+- [x] T5 — src/lib/email-provider.server.ts (Resend adapter + single unsubscribe footer), src/lib/email-send.server.ts, src/routes/lovable/email/queue/process.ts, scripts/tests/email-provider.test.mjs (18 tests) (commit ec9f44e) — tests written first (module-not-found, then 4 footer tests red before the footer existed); verified by controller: npm ci 0, npm test 32/32, tsc 0, build 0, security-gate pass, authz 176, eslint on new files 0. `@lovable.dev/email-js` kept until T6 (auth webhook import).
