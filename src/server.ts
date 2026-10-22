@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { canonicalHostRedirect } from "./lib/canonical-host";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -64,24 +65,6 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 
   console.error(consumeLastCapturedError() ?? new Error(`h3 swallowed SSR error: ${body}`));
   return brandedErrorResponse();
-}
-
-// One canonical origin: when CANONICAL_HOST is set, www.<CANONICAL_HOST> redirects
-// to <CANONICAL_HOST>. Unset means no redirect.
-function canonicalHostRedirect(request: Request): Response | null {
-  const canonicalHost = process.env.CANONICAL_HOST;
-  if (!canonicalHost) return null;
-  let url: URL;
-  try {
-    url = new URL(request.url);
-  } catch {
-    return null;
-  }
-  if (url.hostname !== `www.${canonicalHost}`) return null;
-  // Internal /api/public/hooks/* endpoints authenticate themselves and must never be redirected.
-  if (url.pathname.startsWith("/api/public/hooks/")) return null;
-  url.hostname = canonicalHost;
-  return Response.redirect(url.toString(), 301);
 }
 
 export default {
