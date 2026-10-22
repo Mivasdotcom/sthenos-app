@@ -1,6 +1,7 @@
-import { sendLovableEmail } from '@lovable.dev/email-js'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createFileRoute } from '@tanstack/react-router'
+import { sendEmail } from '@/lib/email-provider.server'
+import { PUBLIC_SITE_URL } from '@/lib/site'
 
 const MAX_RETRIES = 5
 const DEFAULT_BATCH_SIZE = 10
@@ -9,8 +10,7 @@ const DEFAULT_AUTH_TTL_MINUTES = 15
 const DEFAULT_TRANSACTIONAL_TTL_MINUTES = 60
 
 // Check if an error is a rate-limit (429) response.
-// Uses EmailAPIError.status when available (email-js >=0.x with structured errors),
-// falls back to parsing the error message for older versions.
+// Uses EmailProviderError.status when available, falls back to parsing the error message.
 function isRateLimited(error: unknown): boolean {
   if (error && typeof error === 'object' && 'status' in error) {
     return (error as { status: number }).status === 429
@@ -27,7 +27,7 @@ function isForbidden(error: unknown): boolean {
   return error instanceof Error && error.message.includes('403')
 }
 
-// Extract Retry-After seconds from a structured EmailAPIError, or default to 60s.
+// Extract Retry-After seconds from a structured EmailProviderError, or default to 60s.
 function getRetryAfterSeconds(error: unknown): number {
   if (error && typeof error === 'object' && 'retryAfterSeconds' in error) {
     return (error as { retryAfterSeconds: number | null }).retryAfterSeconds ?? 60
@@ -64,7 +64,7 @@ export const Route = createFileRoute("/lovable/email/queue/process")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const apiKey = process.env['LOVABLE_API_KEY']
+        const apiKey = process.env['RESEND_API_KEY']
         const supabaseUrl = import.meta.env['VITE_SUPABASE_URL']
         const supabaseServiceKey = process.env['SUPABASE_SERVICE_ROLE_KEY']
 
@@ -221,29 +221,27 @@ export const Route = createFileRoute("/lovable/email/queue/process")({
             }
 
             try {
-              await sendLovableEmail(
+              await sendEmail(
                 {
-                  run_id: payload.run_id,
                   to: payload.to,
                   from: payload.from,
-                  sender_domain: payload.sender_domain,
                   subject: payload.subject,
                   html: payload.html,
                   text: payload.text,
-                  // Runtime sends without a run_id are only accepted with
-                  // purpose "transactional" — any other value (e.g. an older
-                  // queued payload that still says "marketing") is rejected
-                  // with 400 missing_parameter, so normalise it here. The real
-                  // marketing/transactional category lives in payload.marketing
-                  // and the recipient's opt-out is enforced before queueing.
-                  purpose: payload.run_id ? payload.purpose : 'transactional',
-
-                  label: payload.label,
-                  idempotency_key: payload.idempotency_key,
-                  unsubscribe_token: payload.unsubscribe_token,
-                  message_id: payload.message_id,
+                  idempotencyKey: payload.idempotency_key,
+                  unsubscribeUrl: payload.unsubscribe_token
+                    ? `${PUBLIC_SITE_URL}/unsubscribe?token=${encodeURIComponent(payload.unsubscribe_token)}`
+                    : undefined,
+                  // Tags only, for dashboards. Older queued payloads can lack a
+                  // label, so fall back to the queue name as moveToDlq does.
+                  // The real marketing/transactional category lives in
+                  // payload.marketing and the opt-out is enforced before queueing.
+                  tags: {
+                    label: payload.label || queue,
+                    purpose: payload.run_id ? payload.purpose : 'transactional',
+                  },
                 },
-                { apiKey, sendUrl: process.env['LOVABLE_SEND_URL'] }
+                { apiKey },
               )
 
               // Log success

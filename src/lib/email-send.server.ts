@@ -1,4 +1,4 @@
-import { sendLovableEmail } from "@lovable.dev/email-js";
+import { sendEmail } from "./email-provider.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { PUBLIC_SITE_URL } from "./site";
 
@@ -37,7 +37,7 @@ let statusCache: { at: number; status: SendingStatus } | null = null;
 const CACHE_MS = 5 * 60_000;
 
 function apiKey(): string | undefined {
-  return process.env.LOVABLE_API_KEY;
+  return process.env.RESEND_API_KEY;
 }
 
 /**
@@ -396,7 +396,7 @@ async function inRateLimitCooldown(): Promise<boolean> {
 
 /**
  * Hand a fully-composed message to the shared pgmq queue that already powers
- * auth email retries (`/lovable/email/queue/process`): backoff via the message
+ * auth email retries (the email queue worker): backoff via the message
  * visibility timeout, the `retry_after_until` throttle, a TTL, capped attempts
  * and a dead-letter queue. Nothing else needs to reimplement durability.
  */
@@ -567,9 +567,9 @@ export async function sendAppEmail(args: {
   const unsubToken = unsub.token;
 
   // SINGLE FOOTER — DO NOT ADD ANOTHER, HERE OR IN ANY CALLER.
-  // The sending platform appends exactly one footer of its own ("You received
-  // this email because of an action on <from_name>") including the opt-out link
-  // built from `unsubscribe_token` below. We previously appended a second
+  // The email provider adapter (src/lib/email-provider.server.ts) appends exactly
+  // one footer ("You received this email because of an action on <from_name>")
+  // including the opt-out link built from `unsubscribe_token` below. We previously appended a second
   // marketing footer here, which is why retention/marketing emails arrived with
   // two footers and two unsubscribe links.
   //
@@ -582,7 +582,7 @@ export async function sendAppEmail(args: {
   const html = args.html;
 
 
-  // Exactly the shape /lovable/email/queue/process hands to the provider.
+  // Exactly the shape the email queue worker hands to the provider.
   const queueMessageId = crypto.randomUUID();
   const retryPayload: Record<string, unknown> = {
     to,
@@ -640,24 +640,22 @@ export async function sendAppEmail(args: {
 
 
   try {
-    const res = await sendLovableEmail(
+    const res = await sendEmail(
       {
         to,
         from: `${fromName} <${FROM_ADDRESS}>`,
-        sender_domain: SENDING_DOMAIN,
         subject: args.subject,
         html,
         text: htmlToText(html),
-        label: args.templateName,
-        purpose: providerPurpose,
-        idempotency_key: idempotencyKey,
-        ...(replyTo ? { reply_to: replyTo } : {}),
-        unsubscribe_token: unsubToken,
+        replyTo: replyTo ?? undefined,
+        idempotencyKey,
+        unsubscribeUrl: `${PUBLIC_SITE_URL}/unsubscribe?token=${encodeURIComponent(unsubToken)}`,
+        tags: { label: args.templateName, purpose: providerPurpose },
       },
-      { apiKey: apiKey()!, sendUrl: process.env.LOVABLE_SEND_URL, idempotencyKey },
+      { apiKey: apiKey()! },
     );
 
-    const providerId: string | null = res?.message_id ?? null;
+    const providerId: string | null = res.messageId;
     // A successful send is proof the domain is verified.
     setStatus({ verified: true, canAttempt: true, reason: null });
     await logSend({
