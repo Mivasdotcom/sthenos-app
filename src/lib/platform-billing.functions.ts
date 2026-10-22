@@ -10,9 +10,10 @@ import {
 
 /**
  * Platform SaaS billing — the gym (dojo) pays the platform (Sthenos) for
- * SaaS access. Runs against the platform's single Stripe account through
- * the Lovable connector gateway. Tagged with metadata.type = "platform" so
- * `/api/public/payments/webhook` (gateway webhook) can route the events.
+ * SaaS access. Runs against the platform's single Stripe account, called
+ * directly with the platform's own secret key (see stripe.server.ts). Tagged
+ * with metadata.type = "platform" so `/api/public/payments/webhook` can route
+ * the events.
  *
  * Note: member-dues charges use `payments.functions.ts` (BYOK Connect).
  */

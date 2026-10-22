@@ -2,10 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { StripeEnv } from "@/lib/stripe.server";
 import { verifyStripeWebhook } from "@/lib/stripe.server";
 
-// Gateway (Lovable connector) webhook for the PLATFORM's own Stripe
-// account. Only handles metadata.type === "platform" events for the
-// platform_subscriptions table. Member-dues events go to the BYOK Connect
-// webhook at /api/public/stripe/connect-webhook.
+// Webhook for the PLATFORM's own Stripe account, one endpoint per environment
+// (?env=sandbox|live), verified with PAYMENTS_*_WEBHOOK_SECRET. Only handles
+// metadata.type === "platform" events for the platform_subscriptions table.
+// Member-dues events go to the BYOK Connect webhook at
+// /api/public/stripe/connect-webhook.
 
 function isPlatform(md: any): boolean {
   return md && md.type === "platform" && md.dojoId;

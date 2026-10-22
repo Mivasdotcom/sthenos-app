@@ -109,8 +109,10 @@ export function buildPrivacyNotice(s: PrivacyNoticeSettings): string {
     `These providers act on instructions and may not use member information for their own purposes.`,
     `- Sthenos — the membership system itself, including its database and hosting.`,
     `- Stripe — card payments. Card details are entered directly with Stripe and held by Stripe. ${gym} and Sthenos never hold your card number; only the payment status and a reference.`,
-    `- Lovable — the platform that hosts Sthenos, its database and its email delivery.`,
-    `- An AI service, used to help ${gym}'s staff make sense of their own figures. It receives anonymous, aggregated statistics about ${gym} as a whole, such as member counts and attendance patterns, from which no member can be identified, together with the questions staff type when asking about them. Members' names are replaced with placeholders first, and no contact details, account identifiers or individual records are sent.`,
+    `- Hetzner — hosting of the Sthenos application, in data centres in Germany.`,
+    `- Supabase — the database and sign-in service.`,
+    `- Resend — delivery of email.`,
+    `- Anthropic, an AI service, used to help ${gym}'s staff make sense of their own figures. It receives anonymous, aggregated statistics about ${gym} as a whole, such as member counts and attendance patterns, from which no member can be identified, together with the questions staff type when asking about them. Members' names are replaced with placeholders first, and no contact details, account identifiers or individual records are sent.`,
   );
 
   // Article 13(1)(f): members are told where their information goes. The gym

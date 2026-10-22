@@ -12,7 +12,7 @@ import { PUBLIC_SITE_URL } from "./site";
  * doubled "notify@notify.sthenos.live".
  */
 function normaliseDomain(raw: string | undefined): string {
-  const value = (raw ?? "notify.sthenos.live").trim().toLowerCase();
+  const value = (raw ?? `notify.${new URL(PUBLIC_SITE_URL).hostname}`).trim().toLowerCase();
   // Tolerate a full address or a URL being configured by mistake.
   const host = value.includes("@") ? value.split("@").pop()! : value.replace(/^https?:\/\//, "");
   return host.replace(/\/.*$/, "").replace(/^\.+|\.+$/g, "");

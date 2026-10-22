@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { LogoMark } from "@/components/Logo";
+import { PUBLIC_SITE_URL } from "@/lib/site";
 import {
   Outlet,
   Link,
@@ -92,8 +93,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary" },
       { name: "twitter:title", content: "Sthenos — Martial Arts Gym Management" },
       { name: "twitter:description", content: "Revenue Engine for martial arts gyms: members, attendance, ranks, classes, and billing." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a6188941-4f29-43fb-a6dc-187a5973aa26/id-preview-c2bfc67f--3db57d64-0cfe-4f8a-9958-f7b44a6abc10.lovable.app-1779703897697.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a6188941-4f29-43fb-a6dc-187a5973aa26/id-preview-c2bfc67f--3db57d64-0cfe-4f8a-9958-f7b44a6abc10.lovable.app-1779703897697.png" },
+      { property: "og:image", content: `${PUBLIC_SITE_URL}/og-image.png` },
+      { name: "twitter:image", content: `${PUBLIC_SITE_URL}/og-image.png` },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },

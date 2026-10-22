@@ -12,7 +12,7 @@ let serverEntryPromise: Promise<ServerEntry> | undefined;
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
     serverEntryPromise = import("@tanstack/react-start/server-entry").then(
-      (m) => ((m as { default?: ServerEntry }).default ?? (m as unknown as ServerEntry)),
+      (m) => (m as { default?: ServerEntry }).default ?? (m as unknown as ServerEntry),
     );
   }
   return serverEntryPromise;
@@ -66,20 +66,22 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   return brandedErrorResponse();
 }
 
-// One canonical origin: www.sthenos.live -> sthenos.live
+// One canonical origin: when CANONICAL_HOST is set, www.<CANONICAL_HOST> redirects
+// to <CANONICAL_HOST>. Unset means no redirect.
 function canonicalHostRedirect(request: Request): Response | null {
+  const canonicalHost = process.env.CANONICAL_HOST;
+  if (!canonicalHost) return null;
   let url: URL;
   try {
     url = new URL(request.url);
   } catch {
     return null;
   }
-  if (url.hostname !== "www.sthenos.live") return null;
+  if (url.hostname !== `www.${canonicalHost}`) return null;
   // Internal /api/public/hooks/* endpoints authenticate themselves and must never be redirected.
   if (url.pathname.startsWith("/api/public/hooks/")) return null;
-  url.hostname = "sthenos.live";
+  url.hostname = canonicalHost;
   return Response.redirect(url.toString(), 301);
-
 }
 
 export default {
@@ -96,4 +98,3 @@ export default {
     }
   },
 };
-
