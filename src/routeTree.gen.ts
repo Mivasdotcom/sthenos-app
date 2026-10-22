@@ -24,7 +24,6 @@ import { Route as MyMembershipRouteImport } from './routes/my-membership'
 import { Route as MigrateRouteImport } from './routes/migrate'
 import { Route as MessagesRouteImport } from './routes/messages'
 import { Route as MembersRouteImport } from './routes/members'
-import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MarketingRouteImport } from './routes/marketing'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
@@ -48,15 +47,10 @@ import { Route as SettingsEmailRouteImport } from './routes/settings.email'
 import { Route as SettingsClassTypesRouteImport } from './routes/settings.class-types'
 import { Route as SettingsAgreementsRouteImport } from './routes/settings.agreements'
 import { Route as MembersMemberIdRouteImport } from './routes/members.$memberId'
-import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
-import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as JSlugSignupRouteImport } from './routes/j.$slug.signup'
 import { Route as JSlugPrivacyRouteImport } from './routes/j.$slug.privacy'
-import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
-import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as LovableEmailQueueProcessRouteImport } from './routes/lovable/email/queue/process'
 import { Route as LovableEmailAuthWebhookRouteImport } from './routes/lovable/email/auth/webhook'
-import { Route as LovableEmailAuthPreviewRouteImport } from './routes/lovable/email/auth/preview'
 import { Route as ApiPublicStripeConnectWebhookRouteImport } from './routes/api/public/stripe/connect-webhook'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 import { Route as ApiPublicHooksScheduledWorkflowsRouteImport } from './routes/api/public/hooks/scheduled-workflows'
@@ -136,11 +130,6 @@ const MessagesRoute = MessagesRouteImport.update({
 const MembersRoute = MembersRouteImport.update({
   id: '/members',
   path: '/members',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const McpRoute = McpRouteImport.update({
-  id: '/mcp',
-  path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MarketingRoute = MarketingRouteImport.update({
@@ -258,18 +247,6 @@ const MembersMemberIdRoute = MembersMemberIdRouteImport.update({
   path: '/$memberId',
   getParentRoute: () => MembersRoute,
 } as any)
-const Char91DotwellKnownChar93OauthProtectedResourceRoute =
-  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
-    id: '/.well-known/oauth-protected-resource',
-    path: '/.well-known/oauth-protected-resource',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const Char91DotmcpChar93ListToolsRoute =
-  Char91DotmcpChar93ListToolsRouteImport.update({
-    id: '/.mcp/list-tools',
-    path: '/.mcp/list-tools',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const JSlugSignupRoute = JSlugSignupRouteImport.update({
   id: '/j/$slug/signup',
   path: '/j/$slug/signup',
@@ -278,17 +255,6 @@ const JSlugSignupRoute = JSlugSignupRouteImport.update({
 const JSlugPrivacyRoute = JSlugPrivacyRouteImport.update({
   id: '/j/$slug/privacy',
   path: '/j/$slug/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const Char91DotmcpChar93InvokeToolToolRoute =
-  Char91DotmcpChar93InvokeToolToolRouteImport.update({
-    id: '/.mcp/invoke-tool/$tool',
-    path: '/.mcp/invoke-tool/$tool',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
-  id: '/.lovable/oauth/consent',
-  path: '/.lovable/oauth/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LovableEmailQueueProcessRoute =
@@ -300,11 +266,6 @@ const LovableEmailQueueProcessRoute =
 const LovableEmailAuthWebhookRoute = LovableEmailAuthWebhookRouteImport.update({
   id: '/lovable/email/auth/webhook',
   path: '/lovable/email/auth/webhook',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LovableEmailAuthPreviewRoute = LovableEmailAuthPreviewRouteImport.update({
-  id: '/lovable/email/auth/preview',
-  path: '/lovable/email/auth/preview',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicStripeConnectWebhookRoute =
@@ -351,7 +312,6 @@ export interface FileRoutesByFullPath {
   '/llms.txt': typeof LlmsDottxtRoute
   '/login': typeof LoginRoute
   '/marketing': typeof MarketingRoute
-  '/mcp': typeof McpRoute
   '/members': typeof MembersRouteWithChildren
   '/messages': typeof MessagesRoute
   '/migrate': typeof MigrateRoute
@@ -367,8 +327,6 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/unsubscribe': typeof UnsubscribeRoute
   '/workflows': typeof WorkflowsRoute
-  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
-  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/members/$memberId': typeof MembersMemberIdRoute
   '/settings/agreements': typeof SettingsAgreementsRoute
   '/settings/class-types': typeof SettingsClassTypesRoute
@@ -380,8 +338,6 @@ export interface FileRoutesByFullPath {
   '/settings/waiver-templates': typeof SettingsWaiverTemplatesRoute
   '/members/': typeof MembersIndexRoute
   '/settings/': typeof SettingsIndexRoute
-  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
-  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/j/$slug/privacy': typeof JSlugPrivacyRoute
   '/j/$slug/signup': typeof JSlugSignupRoute
   '/api/public/hooks/membership-nightly': typeof ApiPublicHooksMembershipNightlyRoute
@@ -389,7 +345,6 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/scheduled-workflows': typeof ApiPublicHooksScheduledWorkflowsRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/public/stripe/connect-webhook': typeof ApiPublicStripeConnectWebhookRoute
-  '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
   '/lovable/email/auth/webhook': typeof LovableEmailAuthWebhookRoute
   '/lovable/email/queue/process': typeof LovableEmailQueueProcessRoute
 }
@@ -406,7 +361,6 @@ export interface FileRoutesByTo {
   '/llms.txt': typeof LlmsDottxtRoute
   '/login': typeof LoginRoute
   '/marketing': typeof MarketingRoute
-  '/mcp': typeof McpRoute
   '/messages': typeof MessagesRoute
   '/migrate': typeof MigrateRoute
   '/my-membership': typeof MyMembershipRoute
@@ -420,8 +374,6 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/unsubscribe': typeof UnsubscribeRoute
   '/workflows': typeof WorkflowsRoute
-  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
-  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/members/$memberId': typeof MembersMemberIdRoute
   '/settings/agreements': typeof SettingsAgreementsRoute
   '/settings/class-types': typeof SettingsClassTypesRoute
@@ -433,8 +385,6 @@ export interface FileRoutesByTo {
   '/settings/waiver-templates': typeof SettingsWaiverTemplatesRoute
   '/members': typeof MembersIndexRoute
   '/settings': typeof SettingsIndexRoute
-  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
-  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/j/$slug/privacy': typeof JSlugPrivacyRoute
   '/j/$slug/signup': typeof JSlugSignupRoute
   '/api/public/hooks/membership-nightly': typeof ApiPublicHooksMembershipNightlyRoute
@@ -442,7 +392,6 @@ export interface FileRoutesByTo {
   '/api/public/hooks/scheduled-workflows': typeof ApiPublicHooksScheduledWorkflowsRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/public/stripe/connect-webhook': typeof ApiPublicStripeConnectWebhookRoute
-  '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
   '/lovable/email/auth/webhook': typeof LovableEmailAuthWebhookRoute
   '/lovable/email/queue/process': typeof LovableEmailQueueProcessRoute
 }
@@ -460,7 +409,6 @@ export interface FileRoutesById {
   '/llms.txt': typeof LlmsDottxtRoute
   '/login': typeof LoginRoute
   '/marketing': typeof MarketingRoute
-  '/mcp': typeof McpRoute
   '/members': typeof MembersRouteWithChildren
   '/messages': typeof MessagesRoute
   '/migrate': typeof MigrateRoute
@@ -476,8 +424,6 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/unsubscribe': typeof UnsubscribeRoute
   '/workflows': typeof WorkflowsRoute
-  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
-  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/members/$memberId': typeof MembersMemberIdRoute
   '/settings/agreements': typeof SettingsAgreementsRoute
   '/settings/class-types': typeof SettingsClassTypesRoute
@@ -489,8 +435,6 @@ export interface FileRoutesById {
   '/settings/waiver-templates': typeof SettingsWaiverTemplatesRoute
   '/members/': typeof MembersIndexRoute
   '/settings/': typeof SettingsIndexRoute
-  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
-  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/j/$slug/privacy': typeof JSlugPrivacyRoute
   '/j/$slug/signup': typeof JSlugSignupRoute
   '/api/public/hooks/membership-nightly': typeof ApiPublicHooksMembershipNightlyRoute
@@ -498,7 +442,6 @@ export interface FileRoutesById {
   '/api/public/hooks/scheduled-workflows': typeof ApiPublicHooksScheduledWorkflowsRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/public/stripe/connect-webhook': typeof ApiPublicStripeConnectWebhookRoute
-  '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
   '/lovable/email/auth/webhook': typeof LovableEmailAuthWebhookRoute
   '/lovable/email/queue/process': typeof LovableEmailQueueProcessRoute
 }
@@ -517,7 +460,6 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/login'
     | '/marketing'
-    | '/mcp'
     | '/members'
     | '/messages'
     | '/migrate'
@@ -533,8 +475,6 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/unsubscribe'
     | '/workflows'
-    | '/.mcp/list-tools'
-    | '/.well-known/oauth-protected-resource'
     | '/members/$memberId'
     | '/settings/agreements'
     | '/settings/class-types'
@@ -546,8 +486,6 @@ export interface FileRouteTypes {
     | '/settings/waiver-templates'
     | '/members/'
     | '/settings/'
-    | '/.lovable/oauth/consent'
-    | '/.mcp/invoke-tool/$tool'
     | '/j/$slug/privacy'
     | '/j/$slug/signup'
     | '/api/public/hooks/membership-nightly'
@@ -555,7 +493,6 @@ export interface FileRouteTypes {
     | '/api/public/hooks/scheduled-workflows'
     | '/api/public/payments/webhook'
     | '/api/public/stripe/connect-webhook'
-    | '/lovable/email/auth/preview'
     | '/lovable/email/auth/webhook'
     | '/lovable/email/queue/process'
   fileRoutesByTo: FileRoutesByTo
@@ -572,7 +509,6 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/login'
     | '/marketing'
-    | '/mcp'
     | '/messages'
     | '/migrate'
     | '/my-membership'
@@ -586,8 +522,6 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/unsubscribe'
     | '/workflows'
-    | '/.mcp/list-tools'
-    | '/.well-known/oauth-protected-resource'
     | '/members/$memberId'
     | '/settings/agreements'
     | '/settings/class-types'
@@ -599,8 +533,6 @@ export interface FileRouteTypes {
     | '/settings/waiver-templates'
     | '/members'
     | '/settings'
-    | '/.lovable/oauth/consent'
-    | '/.mcp/invoke-tool/$tool'
     | '/j/$slug/privacy'
     | '/j/$slug/signup'
     | '/api/public/hooks/membership-nightly'
@@ -608,7 +540,6 @@ export interface FileRouteTypes {
     | '/api/public/hooks/scheduled-workflows'
     | '/api/public/payments/webhook'
     | '/api/public/stripe/connect-webhook'
-    | '/lovable/email/auth/preview'
     | '/lovable/email/auth/webhook'
     | '/lovable/email/queue/process'
   id:
@@ -625,7 +556,6 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/login'
     | '/marketing'
-    | '/mcp'
     | '/members'
     | '/messages'
     | '/migrate'
@@ -641,8 +571,6 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/unsubscribe'
     | '/workflows'
-    | '/.mcp/list-tools'
-    | '/.well-known/oauth-protected-resource'
     | '/members/$memberId'
     | '/settings/agreements'
     | '/settings/class-types'
@@ -654,8 +582,6 @@ export interface FileRouteTypes {
     | '/settings/waiver-templates'
     | '/members/'
     | '/settings/'
-    | '/.lovable/oauth/consent'
-    | '/.mcp/invoke-tool/$tool'
     | '/j/$slug/privacy'
     | '/j/$slug/signup'
     | '/api/public/hooks/membership-nightly'
@@ -663,7 +589,6 @@ export interface FileRouteTypes {
     | '/api/public/hooks/scheduled-workflows'
     | '/api/public/payments/webhook'
     | '/api/public/stripe/connect-webhook'
-    | '/lovable/email/auth/preview'
     | '/lovable/email/auth/webhook'
     | '/lovable/email/queue/process'
   fileRoutesById: FileRoutesById
@@ -681,7 +606,6 @@ export interface RootRouteChildren {
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   LoginRoute: typeof LoginRoute
   MarketingRoute: typeof MarketingRoute
-  McpRoute: typeof McpRoute
   MembersRoute: typeof MembersRouteWithChildren
   MessagesRoute: typeof MessagesRoute
   MigrateRoute: typeof MigrateRoute
@@ -697,10 +621,6 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   UnsubscribeRoute: typeof UnsubscribeRoute
   WorkflowsRoute: typeof WorkflowsRoute
-  Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
-  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
-  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
-  Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
   JSlugPrivacyRoute: typeof JSlugPrivacyRoute
   JSlugSignupRoute: typeof JSlugSignupRoute
   ApiPublicHooksMembershipNightlyRoute: typeof ApiPublicHooksMembershipNightlyRoute
@@ -708,7 +628,6 @@ export interface RootRouteChildren {
   ApiPublicHooksScheduledWorkflowsRoute: typeof ApiPublicHooksScheduledWorkflowsRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
   ApiPublicStripeConnectWebhookRoute: typeof ApiPublicStripeConnectWebhookRoute
-  LovableEmailAuthPreviewRoute: typeof LovableEmailAuthPreviewRoute
   LovableEmailAuthWebhookRoute: typeof LovableEmailAuthWebhookRoute
   LovableEmailQueueProcessRoute: typeof LovableEmailQueueProcessRoute
 }
@@ -818,13 +737,6 @@ declare module '@tanstack/react-router' {
       path: '/members'
       fullPath: '/members'
       preLoaderRoute: typeof MembersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mcp': {
-      id: '/mcp'
-      path: '/mcp'
-      fullPath: '/mcp'
-      preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/marketing': {
@@ -988,20 +900,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MembersMemberIdRouteImport
       parentRoute: typeof MembersRoute
     }
-    '/.well-known/oauth-protected-resource': {
-      id: '/.well-known/oauth-protected-resource'
-      path: '/.well-known/oauth-protected-resource'
-      fullPath: '/.well-known/oauth-protected-resource'
-      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/.mcp/list-tools': {
-      id: '/.mcp/list-tools'
-      path: '/.mcp/list-tools'
-      fullPath: '/.mcp/list-tools'
-      preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/j/$slug/signup': {
       id: '/j/$slug/signup'
       path: '/j/$slug/signup'
@@ -1016,20 +914,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JSlugPrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/.mcp/invoke-tool/$tool': {
-      id: '/.mcp/invoke-tool/$tool'
-      path: '/.mcp/invoke-tool/$tool'
-      fullPath: '/.mcp/invoke-tool/$tool'
-      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/.lovable/oauth/consent': {
-      id: '/.lovable/oauth/consent'
-      path: '/.lovable/oauth/consent'
-      fullPath: '/.lovable/oauth/consent'
-      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/lovable/email/queue/process': {
       id: '/lovable/email/queue/process'
       path: '/lovable/email/queue/process'
@@ -1042,13 +926,6 @@ declare module '@tanstack/react-router' {
       path: '/lovable/email/auth/webhook'
       fullPath: '/lovable/email/auth/webhook'
       preLoaderRoute: typeof LovableEmailAuthWebhookRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/lovable/email/auth/preview': {
-      id: '/lovable/email/auth/preview'
-      path: '/lovable/email/auth/preview'
-      fullPath: '/lovable/email/auth/preview'
-      preLoaderRoute: typeof LovableEmailAuthPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/stripe/connect-webhook': {
@@ -1143,7 +1020,6 @@ const rootRouteChildren: RootRouteChildren = {
   LlmsDottxtRoute: LlmsDottxtRoute,
   LoginRoute: LoginRoute,
   MarketingRoute: MarketingRoute,
-  McpRoute: McpRoute,
   MembersRoute: MembersRouteWithChildren,
   MessagesRoute: MessagesRoute,
   MigrateRoute: MigrateRoute,
@@ -1159,11 +1035,6 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   UnsubscribeRoute: UnsubscribeRoute,
   WorkflowsRoute: WorkflowsRoute,
-  Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
-  Char91DotwellKnownChar93OauthProtectedResourceRoute:
-    Char91DotwellKnownChar93OauthProtectedResourceRoute,
-  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
-  Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
   JSlugPrivacyRoute: JSlugPrivacyRoute,
   JSlugSignupRoute: JSlugSignupRoute,
   ApiPublicHooksMembershipNightlyRoute: ApiPublicHooksMembershipNightlyRoute,
@@ -1171,7 +1042,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksScheduledWorkflowsRoute: ApiPublicHooksScheduledWorkflowsRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
   ApiPublicStripeConnectWebhookRoute: ApiPublicStripeConnectWebhookRoute,
-  LovableEmailAuthPreviewRoute: LovableEmailAuthPreviewRoute,
   LovableEmailAuthWebhookRoute: LovableEmailAuthWebhookRoute,
   LovableEmailQueueProcessRoute: LovableEmailQueueProcessRoute,
 }

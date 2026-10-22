@@ -6,7 +6,6 @@
 // You can pass additional config via defineConfig({ vite: { ... } }) if needed.
 import path from "node:path";
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
-import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
 
 const entitiesRoot = path.resolve(import.meta.dirname, "node_modules/entities");
 
@@ -17,7 +16,6 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    plugins: [mcpPlugin()],
     resolve: {
       alias: {
         "entities/lib/decode.js": path.join(entitiesRoot, "lib/decode.js"),
@@ -27,4 +25,3 @@ export default defineConfig({
     },
   },
 });
-
