@@ -74,7 +74,7 @@ That person applies the dashboard changes listed in the runbook (T13).
 ## Acceptance criteria
 - AC1 (R1): `git -C /home/mivas/kapsaliscms/repo status --porcelain` is empty and `git -C repo rev-parse HEAD` = `1a342e3…`
   before and after. `git -C sthenos-app log --oneline | wc -l` = 1 after T1. `test ! -e sthenos-app/.lovable`.
-- AC2 (R2): the grep from R2 prints nothing, except exactly the two known-dead `/lovable/email/transactional/send` calls in `src/routes/cancellations.tsx` and `src/routes/profile.tsx` (follow-up F1, deliberately left visible; amended at T10).
+- AC2 (R2): the grep from R2 prints nothing, except exactly the two known-dead `/lovable/email/transactional/send` calls in `src/routes/cancellations.tsx` and `src/routes/profile.tsx` (follow-up F1, deliberately left visible; amended at T10). Lines in `scripts/tests/*.test.mjs` that assert Lovable is ABSENT (regression guards) are also allowed.
 - AC3 (R3): after `npm run build`, `PORT=3000 node .output/server/index.mjs` (env from `.env.example` with dummy values)
   gives `curl -s localhost:3000/api/public/health` = `{"ok":true}` and `curl -s -o /dev/null -w '%{http_code}' localhost:3000/login` = `200`.
 - AC4 (R4): `scripts/tests/stripe-client.test.mjs` proves `createStripeClient("sandbox")` sends its request to host
@@ -375,6 +375,7 @@ plus `npx eslint <every file touched in the task>`. From T3 on, also run `npm ru
 - [x] T7 — src/lib/cron-auth.server.ts (CRON_SECRET only, ≥16 chars, timingSafeEqual), scheduler.server.ts re-export, src/routes/api/public/hooks/email-queue.ts (moved from lovable/email/queue/process.ts; authorizeCron), start.ts/server.ts prefix, scripts/tests/cron-auth.test.mjs (12 tests) (commit c7a7c94) — red first against the verbatim old body (5 fail: publishable/anon/service-role accepted, secret rejected); verified by controller: npm ci 0, build 0, npm test 53/53, tsc 0, security-gate pass, authz 176. Agent smoke test: publishable → 401, service-role → 401, no auth → 401, correct secret → passes auth.
 
 ## Follow-ups found during implementation (out of scope; not fixed here)
+- F4 (decided by user at T10): privacy notice + privacy page processor lists get a factual swap (Lovable → Hetzner hosting in the EU/Germany, Supabase database, Resend email; the AI service is named as Anthropic). **Have a lawyer review before go-live**, especially the "where your information is held" section (Resend and Anthropic process data in the US).
 - F1 (pre-existing bug): `src/routes/cancellations.tsx:68` and `src/routes/profile.tsx:276` POST to `/lovable/email/transactional/send`. No such route ever existed in the original repo's history, and the templates it names (`cancellation-requested/-confirmed/-dismissed`) don't exist either, so these member emails already fail silently in production (404 swallowed by `catch {}`). Fix it as its own feature, using `sendEmail` from a guarded server function.
 - F2: `npm audit` reports ~26–31 vulnerabilities (6 critical) in the dependency tree. Triage before production.
 - F3: the email-queue worker ignores the error from its `email_send_state` read, so an unreachable DB looks like an empty queue (200). Pre-existing.
