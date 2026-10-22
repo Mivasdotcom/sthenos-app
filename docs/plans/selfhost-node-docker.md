@@ -353,3 +353,7 @@ plus `npx eslint <every file touched in the task>`. From T3 on, also run `npm ru
 - Fixing the 7441 pre-existing lint problems.
 - Migrating Stripe data or price ids between accounts.
 - Changing the schema or migrations.
+
+## Progress
+- [x] T1 — new repo at sthenos-app (commits 42df455 import, 192389c lock sync; `.env` excluded; pins `@hookform/resolvers ~5.2.2`, `@tanstack/react-start ~1.168.10`) — verified by controller: `npm ci` exit 0, security-gate pass, `npm test` 12/12, authorisation-gate 176 guarded, `tsc` exit 0, original repo clean at 1a342e3.
+- [x] T2 — deleted src/routes/{mcp.ts,[.mcp]/,[.well-known]/oauth-protected-resource.ts,[.]lovable.oauth.consent.tsx,lovable/email/auth/preview.ts}, src/lib/mcp/; vite.config.ts; package.json/lock; routeTree.gen.ts (commit 9e7458e) — verified by controller: npm ci 0, security-gate pass, npm test 12/12, authz 176 guarded, tsc 0, eslint vite.config.ts 0, AC9 `mcp` grep empty.
