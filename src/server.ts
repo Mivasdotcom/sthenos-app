@@ -76,7 +76,8 @@ function canonicalHostRedirect(request: Request): Response | null {
   }
   if (url.hostname !== "www.sthenos.live") return null;
   // Internal /lovable/* endpoints authenticate themselves and must never be redirected.
-  if (url.pathname.startsWith("/lovable/")) return null;
+  if (url.pathname.startsWith("/lovable/") || url.pathname.startsWith("/api/public/hooks/"))
+    return null;
   url.hostname = "sthenos.live";
   return Response.redirect(url.toString(), 301);
 

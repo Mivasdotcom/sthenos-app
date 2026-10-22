@@ -51,12 +51,12 @@ import { Route as JSlugSignupRouteImport } from './routes/j.$slug.signup'
 import { Route as JSlugPrivacyRouteImport } from './routes/j.$slug.privacy'
 import { Route as ApiPublicHealthRouteImport } from './routes/api/public/health'
 import { Route as LovableEmailQueueProcessRouteImport } from './routes/lovable/email/queue/process'
-import { Route as LovableEmailAuthWebhookRouteImport } from './routes/lovable/email/auth/webhook'
 import { Route as ApiPublicStripeConnectWebhookRouteImport } from './routes/api/public/stripe/connect-webhook'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 import { Route as ApiPublicHooksScheduledWorkflowsRouteImport } from './routes/api/public/hooks/scheduled-workflows'
 import { Route as ApiPublicHooksRetentionNightlyRouteImport } from './routes/api/public/hooks/retention-nightly'
 import { Route as ApiPublicHooksMembershipNightlyRouteImport } from './routes/api/public/hooks/membership-nightly'
+import { Route as ApiPublicHooksAuthEmailRouteImport } from './routes/api/public/hooks/auth-email'
 
 const WorkflowsRoute = WorkflowsRouteImport.update({
   id: '/workflows',
@@ -269,11 +269,6 @@ const LovableEmailQueueProcessRoute =
     path: '/lovable/email/queue/process',
     getParentRoute: () => rootRouteImport,
   } as any)
-const LovableEmailAuthWebhookRoute = LovableEmailAuthWebhookRouteImport.update({
-  id: '/lovable/email/auth/webhook',
-  path: '/lovable/email/auth/webhook',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiPublicStripeConnectWebhookRoute =
   ApiPublicStripeConnectWebhookRouteImport.update({
     id: '/api/public/stripe/connect-webhook',
@@ -304,6 +299,11 @@ const ApiPublicHooksMembershipNightlyRoute =
     path: '/api/public/hooks/membership-nightly',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksAuthEmailRoute = ApiPublicHooksAuthEmailRouteImport.update({
+  id: '/api/public/hooks/auth-email',
+  path: '/api/public/hooks/auth-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -347,12 +347,12 @@ export interface FileRoutesByFullPath {
   '/api/public/health': typeof ApiPublicHealthRoute
   '/j/$slug/privacy': typeof JSlugPrivacyRoute
   '/j/$slug/signup': typeof JSlugSignupRoute
+  '/api/public/hooks/auth-email': typeof ApiPublicHooksAuthEmailRoute
   '/api/public/hooks/membership-nightly': typeof ApiPublicHooksMembershipNightlyRoute
   '/api/public/hooks/retention-nightly': typeof ApiPublicHooksRetentionNightlyRoute
   '/api/public/hooks/scheduled-workflows': typeof ApiPublicHooksScheduledWorkflowsRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/public/stripe/connect-webhook': typeof ApiPublicStripeConnectWebhookRoute
-  '/lovable/email/auth/webhook': typeof LovableEmailAuthWebhookRoute
   '/lovable/email/queue/process': typeof LovableEmailQueueProcessRoute
 }
 export interface FileRoutesByTo {
@@ -395,12 +395,12 @@ export interface FileRoutesByTo {
   '/api/public/health': typeof ApiPublicHealthRoute
   '/j/$slug/privacy': typeof JSlugPrivacyRoute
   '/j/$slug/signup': typeof JSlugSignupRoute
+  '/api/public/hooks/auth-email': typeof ApiPublicHooksAuthEmailRoute
   '/api/public/hooks/membership-nightly': typeof ApiPublicHooksMembershipNightlyRoute
   '/api/public/hooks/retention-nightly': typeof ApiPublicHooksRetentionNightlyRoute
   '/api/public/hooks/scheduled-workflows': typeof ApiPublicHooksScheduledWorkflowsRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/public/stripe/connect-webhook': typeof ApiPublicStripeConnectWebhookRoute
-  '/lovable/email/auth/webhook': typeof LovableEmailAuthWebhookRoute
   '/lovable/email/queue/process': typeof LovableEmailQueueProcessRoute
 }
 export interface FileRoutesById {
@@ -446,12 +446,12 @@ export interface FileRoutesById {
   '/api/public/health': typeof ApiPublicHealthRoute
   '/j/$slug/privacy': typeof JSlugPrivacyRoute
   '/j/$slug/signup': typeof JSlugSignupRoute
+  '/api/public/hooks/auth-email': typeof ApiPublicHooksAuthEmailRoute
   '/api/public/hooks/membership-nightly': typeof ApiPublicHooksMembershipNightlyRoute
   '/api/public/hooks/retention-nightly': typeof ApiPublicHooksRetentionNightlyRoute
   '/api/public/hooks/scheduled-workflows': typeof ApiPublicHooksScheduledWorkflowsRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/public/stripe/connect-webhook': typeof ApiPublicStripeConnectWebhookRoute
-  '/lovable/email/auth/webhook': typeof LovableEmailAuthWebhookRoute
   '/lovable/email/queue/process': typeof LovableEmailQueueProcessRoute
 }
 export interface FileRouteTypes {
@@ -498,12 +498,12 @@ export interface FileRouteTypes {
     | '/api/public/health'
     | '/j/$slug/privacy'
     | '/j/$slug/signup'
+    | '/api/public/hooks/auth-email'
     | '/api/public/hooks/membership-nightly'
     | '/api/public/hooks/retention-nightly'
     | '/api/public/hooks/scheduled-workflows'
     | '/api/public/payments/webhook'
     | '/api/public/stripe/connect-webhook'
-    | '/lovable/email/auth/webhook'
     | '/lovable/email/queue/process'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -546,12 +546,12 @@ export interface FileRouteTypes {
     | '/api/public/health'
     | '/j/$slug/privacy'
     | '/j/$slug/signup'
+    | '/api/public/hooks/auth-email'
     | '/api/public/hooks/membership-nightly'
     | '/api/public/hooks/retention-nightly'
     | '/api/public/hooks/scheduled-workflows'
     | '/api/public/payments/webhook'
     | '/api/public/stripe/connect-webhook'
-    | '/lovable/email/auth/webhook'
     | '/lovable/email/queue/process'
   id:
     | '__root__'
@@ -596,12 +596,12 @@ export interface FileRouteTypes {
     | '/api/public/health'
     | '/j/$slug/privacy'
     | '/j/$slug/signup'
+    | '/api/public/hooks/auth-email'
     | '/api/public/hooks/membership-nightly'
     | '/api/public/hooks/retention-nightly'
     | '/api/public/hooks/scheduled-workflows'
     | '/api/public/payments/webhook'
     | '/api/public/stripe/connect-webhook'
-    | '/lovable/email/auth/webhook'
     | '/lovable/email/queue/process'
   fileRoutesById: FileRoutesById
 }
@@ -636,12 +636,12 @@ export interface RootRouteChildren {
   ApiPublicHealthRoute: typeof ApiPublicHealthRoute
   JSlugPrivacyRoute: typeof JSlugPrivacyRoute
   JSlugSignupRoute: typeof JSlugSignupRoute
+  ApiPublicHooksAuthEmailRoute: typeof ApiPublicHooksAuthEmailRoute
   ApiPublicHooksMembershipNightlyRoute: typeof ApiPublicHooksMembershipNightlyRoute
   ApiPublicHooksRetentionNightlyRoute: typeof ApiPublicHooksRetentionNightlyRoute
   ApiPublicHooksScheduledWorkflowsRoute: typeof ApiPublicHooksScheduledWorkflowsRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
   ApiPublicStripeConnectWebhookRoute: typeof ApiPublicStripeConnectWebhookRoute
-  LovableEmailAuthWebhookRoute: typeof LovableEmailAuthWebhookRoute
   LovableEmailQueueProcessRoute: typeof LovableEmailQueueProcessRoute
 }
 
@@ -941,13 +941,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LovableEmailQueueProcessRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/lovable/email/auth/webhook': {
-      id: '/lovable/email/auth/webhook'
-      path: '/lovable/email/auth/webhook'
-      fullPath: '/lovable/email/auth/webhook'
-      preLoaderRoute: typeof LovableEmailAuthWebhookRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/stripe/connect-webhook': {
       id: '/api/public/stripe/connect-webhook'
       path: '/api/public/stripe/connect-webhook'
@@ -981,6 +974,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/hooks/membership-nightly'
       fullPath: '/api/public/hooks/membership-nightly'
       preLoaderRoute: typeof ApiPublicHooksMembershipNightlyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/auth-email': {
+      id: '/api/public/hooks/auth-email'
+      path: '/api/public/hooks/auth-email'
+      fullPath: '/api/public/hooks/auth-email'
+      preLoaderRoute: typeof ApiPublicHooksAuthEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -1058,12 +1058,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHealthRoute: ApiPublicHealthRoute,
   JSlugPrivacyRoute: JSlugPrivacyRoute,
   JSlugSignupRoute: JSlugSignupRoute,
+  ApiPublicHooksAuthEmailRoute: ApiPublicHooksAuthEmailRoute,
   ApiPublicHooksMembershipNightlyRoute: ApiPublicHooksMembershipNightlyRoute,
   ApiPublicHooksRetentionNightlyRoute: ApiPublicHooksRetentionNightlyRoute,
   ApiPublicHooksScheduledWorkflowsRoute: ApiPublicHooksScheduledWorkflowsRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
   ApiPublicStripeConnectWebhookRoute: ApiPublicStripeConnectWebhookRoute,
-  LovableEmailAuthWebhookRoute: LovableEmailAuthWebhookRoute,
   LovableEmailQueueProcessRoute: LovableEmailQueueProcessRoute,
 }
 export const routeTree = rootRouteImport
