@@ -1,9 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
+import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { scoreRetentionRisk } from "@/lib/retention";
 import { assessReadiness } from "@/lib/belt-readiness";
 import { assertDojoStaff } from "@/lib/dojo-access";
+import { callSensei } from "./sensei-llm.server";
 
 const MessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -597,7 +599,7 @@ export const askSensei = createServerFn({ method: "POST" })
   .inputValidator((input) => InputSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertDojoStaff(context.supabase, context.userId, data.dojoId, "askSensei");
-    const apiKey = process.env.LOVABLE_API_KEY;
+    const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return { reply: null, error: "AI is not configured." };
 
     const rawSnapshot = data.snapshot ? (data.snapshot as any) : await buildSnapshot(context.supabase, data.dojoId);
@@ -671,34 +673,10 @@ AGGREGATE GYM STATISTICS (JSON):
 ${JSON.stringify(snapshot)}`;
 
 
-    try {
-      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
-          messages: [{ role: "system", content: system }, ...messages],
-        }),
-      });
-
-      if (!res.ok) {
-        if (res.status === 429) return { reply: null, error: "Rate limit hit. Try again in a moment." };
-        if (res.status === 402) return { reply: null, error: "AI credits exhausted. Add funds in Settings → Workspace → Usage." };
-        const t = await res.text();
-        console.error("Sensei AI gateway error:", res.status, t);
-        return { reply: null, error: `AI gateway error (${res.status}).` };
-      }
-
-      const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-      const raw = json.choices?.[0]?.message?.content?.trim() ?? "";
-      if (!raw) return { reply: null, error: "Empty response from AI." };
-      return { reply: raw, error: null };
-
-    } catch (e) {
-      console.error("Sensei call failed:", e);
-      return { reply: null, error: "Sensei is unavailable right now." };
-    }
+    return callSensei({
+      client: new Anthropic({ apiKey }),
+      model: process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5",
+      system,
+      messages,
+    });
   });
