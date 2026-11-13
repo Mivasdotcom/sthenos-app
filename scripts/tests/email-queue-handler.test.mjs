@@ -537,3 +537,251 @@ describe("isDomainNotVerified", () => {
     assert.equal(isDomainNotVerified(500, "The sthenos.live domain is not verified."), false);
   });
 });
+
+/**
+ * email_send_log script for the worker's two lookups: the duplicate guard
+ * (`.eq(message_id).eq(status,'sent').maybeSingle()`) and the failed-attempt
+ * counter (`.in(message_id, ids).eq(status,'failed')`).
+ */
+function sendLogScript({ sentIds = [], failedCounts = {} } = {}) {
+  return (ops) => {
+    if (ops.some((op) => op.method === "maybeSingle")) {
+      const messageId = ops.find((op) => op.method === "eq" && op.args[0] === "message_id")
+        ?.args[1];
+      return { data: sentIds.includes(messageId) ? { id: 1 } : null, error: null };
+    }
+    if (ops.some((op) => op.method === "in")) {
+      const rows = [];
+      for (const [messageId, count] of Object.entries(failedCounts)) {
+        for (let i = 0; i < count; i++) rows.push({ message_id: messageId });
+      }
+      return { data: rows, error: null };
+    }
+    return { data: [], error: null };
+  };
+}
+
+function sentSubjects(sent) {
+  return sent.calls.map((call) => call.input.subject);
+}
+
+describe("duplicate-send guard", () => {
+  it("skips a message that already has a sent row, deletes it from the queue, and still sends the decoy", async () => {
+    silenceConsole();
+    const supabase = fakeSupabase({
+      tables: {
+        email_send_state: { data: DEFAULT_STATE, error: null },
+        email_send_log: sendLogScript({ sentIds: ["m-1"] }),
+      },
+      rpc: {
+        read_email_batch: readBatches({ auth_emails: [queuedMessage(1), queuedMessage(2)] }),
+      },
+    });
+    const sent = fakeSend();
+    const { deps } = makeDeps({ supabase, send: sent.send });
+
+    const result = await run(request(bearer(CRON_SECRET)), deps);
+
+    assert.deepEqual(result, { status: 200, body: { processed: 1 } });
+    assert.deepEqual(sentSubjects(sent), ["Subject 2"], "only the decoy may be sent");
+    assert.deepEqual(rpcCalls(supabase, "delete_email"), [
+      { queue_name: "auth_emails", message_id: 1 },
+      { queue_name: "auth_emails", message_id: 2 },
+    ]);
+    assert.deepEqual(
+      logRows(supabase, "sent").map((row) => row.message_id),
+      ["m-2"],
+      "no second sent row is written for the duplicate",
+    );
+    assert.equal(rpcCalls(supabase, "move_to_dlq").length, 0);
+  });
+});
+
+describe("max retries", () => {
+  it("moves a message with 5 failed attempts to the DLQ without sending it, and still sends the decoy", async () => {
+    silenceConsole();
+    const supabase = fakeSupabase({
+      tables: {
+        email_send_state: { data: DEFAULT_STATE, error: null },
+        email_send_log: sendLogScript({ failedCounts: { "m-1": 5 } }),
+      },
+      rpc: {
+        read_email_batch: readBatches({ auth_emails: [queuedMessage(1), queuedMessage(2)] }),
+      },
+    });
+    const sent = fakeSend();
+    const { deps } = makeDeps({ supabase, send: sent.send });
+
+    const result = await run(request(bearer(CRON_SECRET)), deps);
+
+    assert.deepEqual(result, { status: 200, body: { processed: 1 } });
+    assert.deepEqual(sentSubjects(sent), ["Subject 2"], "the exhausted message must not be sent");
+    assert.deepEqual(rpcCalls(supabase, "move_to_dlq"), [
+      {
+        source_queue: "auth_emails",
+        dlq_name: "auth_emails_dlq",
+        message_id: 1,
+        payload: queuedMessage(1).message,
+      },
+    ]);
+    const dlqRows = logRows(supabase, "dlq");
+    assert.equal(dlqRows.length, 1);
+    assert.equal(dlqRows[0].message_id, "m-1");
+    assert.equal(dlqRows[0].error_message, "Max retries (5) exceeded (attempted 5 times)");
+    assert.deepEqual(
+      rpcCalls(supabase, "delete_email").map((call) => call.message_id),
+      [2],
+      "the DLQ move replaces the delete for message 1",
+    );
+  });
+
+  it("still sends a message with 4 failed attempts (one below the limit, positive control)", async () => {
+    silenceConsole();
+    const supabase = fakeSupabase({
+      tables: {
+        email_send_state: { data: DEFAULT_STATE, error: null },
+        email_send_log: sendLogScript({ failedCounts: { "m-1": 4 } }),
+      },
+      rpc: { read_email_batch: readBatches({ auth_emails: [queuedMessage(1)] }) },
+    });
+    const sent = fakeSend();
+    const { deps } = makeDeps({ supabase, send: sent.send });
+
+    const result = await run(request(bearer(CRON_SECRET)), deps);
+
+    assert.deepEqual(result, { status: 200, body: { processed: 1 } });
+    assert.deepEqual(sentSubjects(sent), ["Subject 1"]);
+    assert.equal(rpcCalls(supabase, "move_to_dlq").length, 0);
+  });
+
+  it("a high pgmq read_ct alone does not DLQ a message: the budget counts failed sends", async () => {
+    silenceConsole();
+    const supabase = fakeSupabase({
+      tables: {
+        email_send_state: { data: DEFAULT_STATE, error: null },
+        email_send_log: sendLogScript({ failedCounts: {} }),
+      },
+      rpc: {
+        read_email_batch: readBatches({
+          auth_emails: [{ ...queuedMessage(1), read_ct: 9 }, queuedMessage(2)],
+        }),
+      },
+    });
+    const sent = fakeSend();
+    const { deps } = makeDeps({ supabase, send: sent.send });
+
+    const result = await run(request(bearer(CRON_SECRET)), deps);
+
+    assert.deepEqual(result, { status: 200, body: { processed: 2 } });
+    assert.deepEqual(sentSubjects(sent), ["Subject 1", "Subject 2"]);
+    assert.equal(rpcCalls(supabase, "move_to_dlq").length, 0);
+  });
+});
+
+describe("generic send failure", () => {
+  /** Sends message 1 with the given error and message 2 normally. */
+  async function runWithFailingFirstSend(error) {
+    silenceConsole();
+    const supabase = fakeSupabase({
+      tables: { email_send_state: { data: DEFAULT_STATE, error: null } },
+      rpc: {
+        read_email_batch: readBatches({ auth_emails: [queuedMessage(1), queuedMessage(2)] }),
+      },
+    });
+    const sent = fakeSend((input) => {
+      if (input.subject === "Subject 1") throw error;
+      return { messageId: "re_ok" };
+    });
+    const { deps } = makeDeps({ supabase, send: sent.send });
+
+    const result = await run(request(bearer(CRON_SECRET)), deps);
+    return { result, supabase, sent };
+  }
+
+  function assertFailureRecorded(supabase, sent, result, errorMessage) {
+    assert.deepEqual(result, { status: 200, body: { processed: 1 } }, "the batch must continue");
+    assert.deepEqual(sentSubjects(sent), ["Subject 1", "Subject 2"]);
+    assert.deepEqual(
+      rpcCalls(supabase, "delete_email").map((call) => call.message_id),
+      [2],
+      "the failed message must not be deleted from the queue",
+    );
+    assert.equal(rpcCalls(supabase, "move_to_dlq").length, 0);
+
+    const failedRows = logRows(supabase, "failed");
+    assert.equal(failedRows.length, 1);
+    assert.equal(failedRows[0].message_id, "m-1");
+    assert.equal(failedRows[0].recipient_email, "member@example.com");
+    assert.equal(failedRows[0].error_message, errorMessage);
+    assert.deepEqual(
+      logRows(supabase, "sent").map((row) => row.message_id),
+      ["m-2"],
+    );
+  }
+
+  it("an Error with no status is not deleted, is logged as failed, and the batch continues", async () => {
+    const { result, supabase, sent } = await runWithFailingFirstSend(new Error("socket hang up"));
+
+    assertFailureRecorded(supabase, sent, result, "socket hang up");
+  });
+
+  it("a 500 from the provider is not deleted, is logged as failed, and the batch continues", async () => {
+    const { result, supabase, sent } = await runWithFailingFirstSend(
+      new EmailProviderError("Internal server error", 500, null),
+    );
+
+    assertFailureRecorded(supabase, sent, result, "Internal server error");
+  });
+});
+
+describe("TTL boundary and decoy", () => {
+  it("an expired auth email goes to the DLQ with a dlq row, and a fresh decoy in the batch is sent", async () => {
+    silenceConsole();
+    const supabase = fakeSupabase({
+      tables: { email_send_state: { data: DEFAULT_STATE, error: null } },
+      rpc: {
+        read_email_batch: readBatches({
+          auth_emails: [
+            queuedMessage(1, { queued_at: iso(FIXED_NOW - 16 * 60 * 1000) }),
+            queuedMessage(2),
+          ],
+        }),
+      },
+    });
+    const sent = fakeSend();
+    const { deps } = makeDeps({ supabase, send: sent.send });
+
+    const result = await run(request(bearer(CRON_SECRET)), deps);
+
+    assert.deepEqual(result, { status: 200, body: { processed: 1 } });
+    assert.deepEqual(sentSubjects(sent), ["Subject 2"]);
+    assert.deepEqual(
+      rpcCalls(supabase, "move_to_dlq").map((call) => call.message_id),
+      [1],
+    );
+    const dlqRows = logRows(supabase, "dlq");
+    assert.equal(dlqRows.length, 1);
+    assert.equal(dlqRows[0].message_id, "m-1");
+    assert.equal(dlqRows[0].error_message, "TTL exceeded (15 minutes)");
+  });
+
+  it("an auth email exactly at the 15-minute TTL is not expired and is sent (boundary control)", async () => {
+    silenceConsole();
+    const supabase = fakeSupabase({
+      tables: { email_send_state: { data: DEFAULT_STATE, error: null } },
+      rpc: {
+        read_email_batch: readBatches({
+          auth_emails: [queuedMessage(1, { queued_at: iso(FIXED_NOW - 15 * 60 * 1000) })],
+        }),
+      },
+    });
+    const sent = fakeSend();
+    const { deps } = makeDeps({ supabase, send: sent.send });
+
+    const result = await run(request(bearer(CRON_SECRET)), deps);
+
+    assert.deepEqual(result, { status: 200, body: { processed: 1 } });
+    assert.deepEqual(sentSubjects(sent), ["Subject 1"]);
+    assert.equal(rpcCalls(supabase, "move_to_dlq").length, 0);
+  });
+});

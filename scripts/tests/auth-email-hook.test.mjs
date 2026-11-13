@@ -272,3 +272,64 @@ test("a secret given without the v1,whsec_ prefix still verifies", () => {
 
   assert.equal(result.emailType, "recovery");
 });
+
+test("a correctly signed body that is not valid JSON is rejected with 400", () => {
+  const body = "{not json";
+
+  assert.throws(
+    () => verify(body, signedHeaders(body)),
+    (err) => err instanceof HookError && err.status === 400 && err.message === "Invalid JSON",
+  );
+});
+
+test("a correctly signed body with no user.email is rejected with 400", () => {
+  const body = JSON.stringify({
+    user: { id: "user-1" },
+    email_data: { email_action_type: "recovery", token: "123456", token_hash: "h" },
+  });
+
+  assert.throws(
+    () => verify(body, signedHeaders(body)),
+    (err) => err instanceof HookError && err.status === 400,
+  );
+});
+
+test("a correctly signed body with an empty user.email is rejected with 400", () => {
+  const body = JSON.stringify(payload({ user: { email: "" } }));
+
+  assert.throws(
+    () => verify(body, signedHeaders(body)),
+    (err) => err instanceof HookError && err.status === 400,
+  );
+});
+
+test("a correctly signed body with no email_data.email_action_type is rejected with 400", () => {
+  const body = JSON.stringify({
+    user: { id: "user-1", email: "member@example.com" },
+    email_data: { token: "123456", token_hash: "h" },
+  });
+
+  assert.throws(
+    () => verify(body, signedHeaders(body)),
+    (err) => err instanceof HookError && err.status === 400,
+  );
+});
+
+test("a timestamp 301 seconds in the FUTURE is rejected with 401", () => {
+  const body = JSON.stringify(payload());
+  const headers = signedHeaders(body, { timestamp: NOW + 301 });
+
+  assert.throws(
+    () => verify(body, headers),
+    (err) => err instanceof HookError && err.status === 401,
+  );
+});
+
+test("a timestamp 299 seconds in the FUTURE is accepted (positive control for future skew)", () => {
+  const body = JSON.stringify(payload());
+  const headers = signedHeaders(body, { timestamp: NOW + 299 });
+
+  const [result] = verify(body, headers);
+
+  assert.equal(result.emailType, "recovery");
+});
