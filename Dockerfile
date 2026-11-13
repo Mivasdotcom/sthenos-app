@@ -23,6 +23,18 @@ ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID \
     VITE_PUBLIC_SITE_URL=$VITE_PUBLIC_SITE_URL
 
+# Refuse to build when a VITE_* build arg is empty or missing: Vite would inline the
+# empty value into the bundle without any error. Plain POSIX sh (base image /bin/sh is dash).
+RUN missing=""; \
+    [ -n "$VITE_SUPABASE_URL" ] || missing="$missing VITE_SUPABASE_URL"; \
+    [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing="$missing VITE_SUPABASE_PUBLISHABLE_KEY"; \
+    [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing="$missing VITE_SUPABASE_PROJECT_ID"; \
+    [ -n "$VITE_PUBLIC_SITE_URL" ] || missing="$missing VITE_PUBLIC_SITE_URL"; \
+    if [ -n "$missing" ]; then \
+      echo "Build failed: empty or missing build args:$missing. Pass all four VITE_* build args (see deploy/README.md section 4)." >&2; \
+      exit 1; \
+    fi
+
 RUN npm run build
 
 # --- Runtime stage -----------------------------------------------------------

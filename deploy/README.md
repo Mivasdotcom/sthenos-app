@@ -263,6 +263,13 @@ says which of three places it is set:
 - **compose shell**: exported in the shell that runs `docker compose`. CI sets
   these for each deploy. Manual deploys set them by hand (section 9).
 
+Building the image yourself (`docker build` or `docker compose build`; the server
+never builds): the four `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`,
+`VITE_SUPABASE_PROJECT_ID` and `VITE_PUBLIC_SITE_URL` build args are mandatory.
+The build fails, naming each one that is empty or missing. For `docker build`,
+pass them with `--build-arg`. For `docker compose build`, set them in `.env` or in
+the shell.
+
 | Name | Where it goes | Where to get it | Required? |
 |------|---------------|-----------------|-----------|
 | `VITE_SUPABASE_URL` | repo variable (build time) | Supabase → Project Settings → API → Project URL (`https://<project-ref>.supabase.co`) | Yes |
