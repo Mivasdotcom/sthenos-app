@@ -5,8 +5,50 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { scoreRetentionRisk } from "@/lib/retention";
 import { assessReadiness } from "@/lib/belt-readiness";
 import { assertDojoStaff } from "@/lib/dojo-access";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
+import type { BookingOutcome } from "./retention";
 import { callSensei } from "./sensei-llm.server";
 import { envOr } from "./env.ts";
+
+type Tables = Database["public"]["Tables"];
+type TableRow<T extends keyof Tables> = Tables[T]["Row"];
+
+/** Joined plan price, as selected through the `dojo_plans` alias. */
+type JoinedPlan = Pick<TableRow<"dojo_plans">, "price_cents" | "currency" | "interval"> | null;
+
+// Row shapes of the snapshot queries in buildSnapshot. Each lists exactly the
+// columns that query selects.
+type InvoiceRow = Pick<
+  TableRow<"invoices">,
+  "id" | "member_id" | "amount_cents" | "currency" | "status" | "paid_at" | "due_date" | "plan"
+>;
+type MemberRow = Pick<
+  TableRow<"members">,
+  | "id"
+  | "name"
+  | "status"
+  | "plan"
+  | "discipline"
+  | "belt_color"
+  | "stripes"
+  | "joined_at"
+  | "last_seen_at"
+  | "lead_source"
+  | "referred_by"
+  | "payment_method"
+  | "selected_plan_id"
+> & { dojo_plans: JoinedPlan };
+type AttendanceRow = Pick<TableRow<"attendances">, "class_id" | "checked_in_at" | "member_id">;
+type ClassRow = Pick<TableRow<"classes">, "id" | "name" | "capacity" | "weekday">;
+type PromotionRow = Pick<
+  TableRow<"promotions">,
+  "id" | "member_id" | "discipline" | "to_color" | "to_label" | "promoted_at"
+>;
+type SubscriptionRow = Pick<TableRow<"member_subscriptions">, "member_id" | "status"> & {
+  dojo_plans: JoinedPlan;
+};
+type BookingRow = Pick<TableRow<"class_bookings">, "member_id" | "status" | "booked_for_date">;
 
 const MessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -41,9 +83,12 @@ function daysBetween(a: Date, b: Date) {
   return Math.floor((b.getTime() - a.getTime()) / 86400000);
 }
 
-async function buildSnapshot(supabase: any, dojoId: string) {
+async function buildSnapshot(supabase: SupabaseClient<Database>, dojoId: string) {
   const [inv, mem, att, cls, pro, subs, dojoRow, bk] = await Promise.all([
-    supabase.from("invoices").select("id,member_id,amount_cents,currency,status,paid_at,due_date,plan").eq("dojo_id", dojoId),
+    supabase
+      .from("invoices")
+      .select("id,member_id,amount_cents,currency,status,paid_at,due_date,plan")
+      .eq("dojo_id", dojoId),
     supabase
       .from("members")
       .select(
@@ -52,23 +97,28 @@ async function buildSnapshot(supabase: any, dojoId: string) {
       .eq("dojo_id", dojoId),
     supabase.from("attendances").select("class_id,checked_in_at,member_id").eq("dojo_id", dojoId),
     supabase.from("classes").select("id,name,capacity,weekday").eq("dojo_id", dojoId),
-    supabase.from("promotions").select("id,member_id,discipline,to_color,to_label,promoted_at").eq("dojo_id", dojoId),
+    supabase
+      .from("promotions")
+      .select("id,member_id,discipline,to_color,to_label,promoted_at")
+      .eq("dojo_id", dojoId),
     supabase
       .from("member_subscriptions")
       .select("member_id,status,dojo_plans:plan_id(price_cents,currency,interval)")
       .eq("dojo_id", dojoId)
       .in("status", ["active", "trialing"]),
     supabase.from("dojos").select("default_currency").eq("id", dojoId).maybeSingle(),
-    supabase.from("class_bookings").select("member_id,status,booked_for_date").eq("dojo_id", dojoId),
+    supabase
+      .from("class_bookings")
+      .select("member_id,status,booked_for_date")
+      .eq("dojo_id", dojoId),
   ]);
 
-
-  const invoices = (inv.data ?? []) as any[];
-  const members = (mem.data ?? []) as any[];
-  const attendances = (att.data ?? []) as any[];
-  const classes = (cls.data ?? []) as any[];
-  const promotions = (pro.data ?? []) as any[];
-  const subscriptions = (subs.data ?? []) as any[];
+  const invoices = (inv.data ?? []) as InvoiceRow[];
+  const members = (mem.data ?? []) as MemberRow[];
+  const attendances = (att.data ?? []) as AttendanceRow[];
+  const classes = (cls.data ?? []) as ClassRow[];
+  const promotions = (pro.data ?? []) as PromotionRow[];
+  const subscriptions = (subs.data ?? []) as SubscriptionRow[];
   const defaultCurrency = ((dojoRow.data?.default_currency ?? "usd") as string).toLowerCase();
 
   const now = new Date();
@@ -101,7 +151,7 @@ async function buildSnapshot(supabase: any, dojoId: string) {
   // Cash members pay monthly on a plan without holding a Stripe subscription,
   // so they belong in recurring revenue too -- and must match what the
   // dashboard reports, or the assistant and the page contradict each other.
-  const subscribedIds = new Set(subscriptions.map((s: any) => s.member_id));
+  const subscribedIds = new Set(subscriptions.map((s) => s.member_id));
   for (const m of members) {
     if (m.payment_method !== "cash") continue;
     if (!["active", "trial"].includes(String(m.status))) continue;
@@ -140,7 +190,7 @@ async function buildSnapshot(supabase: any, dojoId: string) {
   const trial = members.filter((m) => m.status === "trial").length;
   const churnPct = members.length ? (lapsed / members.length) * 100 : 0;
 
-  const paidByMember = new Map<string, number>();
+  const paidByMember = new Map<string | null, number>();
   invoices.forEach((i) => {
     if (i.status !== "paid") return;
     const cur = ((i.currency ?? defaultCurrency) as string).toLowerCase();
@@ -191,7 +241,6 @@ async function buildSnapshot(supabase: any, dojoId: string) {
     checkins: c.total,
   }));
 
-
   // cohorts
   const cohortMonths = months.slice(-6);
   const cohorts = cohortMonths.map((cm) => {
@@ -225,28 +274,36 @@ async function buildSnapshot(supabase: any, dojoId: string) {
     return [...m.entries()].map(([key, count]) => ({ key, count }));
   };
 
-  const planMix = byKey(members, (m: any) => m.plan ?? "unknown");
-  const disciplineMix = byKey(members, (m: any) => m.discipline ?? "unknown");
-  const beltDistribution = byKey(members, (m: any) => `${m.discipline ?? "?"}:${m.belt_color ?? "?"}`);
-  const statusMix = byKey(members, (m: any) => m.status ?? "unknown");
-  const leadSourceMix = byKey(members, (m: any) => m.lead_source ?? "unknown")
+  const planMix = byKey(members, (m) => m.plan ?? "unknown");
+  const disciplineMix = byKey(members, (m) => m.discipline ?? "unknown");
+  const beltDistribution = byKey(members, (m) => `${m.discipline ?? "?"}:${m.belt_color ?? "?"}`);
+  const statusMix = byKey(members, (m) => m.status ?? "unknown");
+  const leadSourceMix = byKey(members, (m) => m.lead_source ?? "unknown")
     .map((r) => ({
       ...r,
       pct: members.length ? Number(((r.count / members.length) * 100).toFixed(1)) : 0,
     }))
     .sort((a, b) => b.count - a.count);
   const topReferrers = byKey(
-    members.filter((m: any) => (m.referred_by ?? "").trim().length > 0),
-    (m: any) => String(m.referred_by).trim(),
-  ).sort((a, b) => b.count - a.count).slice(0, 10);
+    members.filter((m) => (m.referred_by ?? "").trim().length > 0),
+    (m) => String(m.referred_by).trim(),
+  )
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
 
   // revenue by plan (lifetime paid)
   const revenueByPlan = new Map<string, number>();
   invoices.forEach((i) => {
     if (i.status !== "paid") return;
-    revenueByPlan.set(i.plan ?? "unknown", (revenueByPlan.get(i.plan ?? "unknown") ?? 0) + i.amount_cents);
+    revenueByPlan.set(
+      i.plan ?? "unknown",
+      (revenueByPlan.get(i.plan ?? "unknown") ?? 0) + i.amount_cents,
+    );
   });
-  const planRevenue_usd = [...revenueByPlan.entries()].map(([plan, c]) => ({ plan, revenue: c / 100 }));
+  const planRevenue_usd = [...revenueByPlan.entries()].map(([plan, c]) => ({
+    plan,
+    revenue: c / 100,
+  }));
 
   // attendance per member (last 30 / 90 days)
   const d30 = new Date(Date.now() - 30 * 86400000);
@@ -259,7 +316,7 @@ async function buildSnapshot(supabase: any, dojoId: string) {
     if (t >= d90) visit90.set(a.member_id, (visit90.get(a.member_id) ?? 0) + 1);
   });
 
-  const memberRows = members.map((m: any) => ({
+  const memberRows = members.map((m) => ({
     id: m.id,
     name: m.name,
     status: m.status,
@@ -275,7 +332,7 @@ async function buildSnapshot(supabase: any, dojoId: string) {
   }));
 
   // ---- Domain signals: retention risk, belt readiness, no-shows ----
-  const bookings = (bk.data ?? []) as any[];
+  const bookings = (bk.data ?? []) as BookingRow[];
   const d60 = new Date(Date.now() - 60 * 86400000);
   const prev30 = new Map<string, number>();
   attendances.forEach((a) => {
@@ -285,7 +342,7 @@ async function buildSnapshot(supabase: any, dojoId: string) {
 
   const noShow90 = new Map<string, number>();
   const booked90 = new Map<string, number>();
-  const bookings30 = new Map<string, { booked_for_date: string; status: "booked" | "attended" | "no_show" }[]>();
+  const bookings30 = new Map<string, BookingOutcome[]>();
   bookings.forEach((b) => {
     const t = new Date(`${b.booked_for_date}T00:00:00Z`);
     if (t < d90) return;
@@ -293,18 +350,21 @@ async function buildSnapshot(supabase: any, dojoId: string) {
     if (b.status === "no_show") noShow90.set(b.member_id, (noShow90.get(b.member_id) ?? 0) + 1);
     if (t >= d30) {
       const arr = bookings30.get(b.member_id) ?? [];
-      arr.push({ booked_for_date: b.booked_for_date, status: b.status });
+      // The column also holds "cancelled"; BookingOutcome predates it. Same as retention.functions.ts.
+      arr.push({
+        booked_for_date: b.booked_for_date,
+        status: b.status as BookingOutcome["status"],
+      });
       bookings30.set(b.member_id, arr);
     }
   });
-
 
   // Latest promotion per member+discipline+colour gives time-at-current-belt.
   const beltSince = new Map<string, string>();
   [...promotions]
     .sort((a, b) => +new Date(a.promoted_at) - +new Date(b.promoted_at))
     .forEach((p) => {
-      const m = members.find((x: any) => x.id === p.member_id);
+      const m = members.find((x) => x.id === p.member_id);
       if (!m) return;
       if (p.to_color && m.belt_color && p.to_color === m.belt_color) {
         beltSince.set(p.member_id, p.promoted_at);
@@ -312,8 +372,8 @@ async function buildSnapshot(supabase: any, dojoId: string) {
     });
 
   const riskScores = members
-    .filter((m: any) => m.status === "active" || m.status === "trial")
-    .map((m: any) =>
+    .filter((m) => m.status === "active" || m.status === "trial")
+    .map((m) =>
       scoreRetentionRisk({
         id: m.id,
         name: m.name,
@@ -324,7 +384,6 @@ async function buildSnapshot(supabase: any, dojoId: string) {
         recentSessions: visit30.get(m.id) ?? 0,
         previousSessions: prev30.get(m.id) ?? 0,
         recentBookings: bookings30.get(m.id) ?? [],
-
       }),
     )
     .map((r) => {
@@ -358,13 +417,13 @@ async function buildSnapshot(supabase: any, dojoId: string) {
 
   const readiness = members
     .filter(
-      (m: any) =>
+      (m) =>
         m.status === "active" &&
         m.belt_color &&
         m.belt_color !== "beginner" &&
         m.belt_color !== "black",
     )
-    .map((m: any) =>
+    .map((m) =>
       assessReadiness({
         id: m.id,
         name: m.name,
@@ -378,7 +437,9 @@ async function buildSnapshot(supabase: any, dojoId: string) {
 
   const readyToGrade = readiness
     .filter((r) => r.level !== "not-yet")
-    .sort((a, b) => (a.level === b.level ? b.sessionsLast90 - a.sessionsLast90 : a.level === "ready" ? -1 : 1))
+    .sort((a, b) =>
+      a.level === b.level ? b.sessionsLast90 - a.sessionsLast90 : a.level === "ready" ? -1 : 1,
+    )
     .slice(0, 25)
     .map((r) => ({
       name: r.name,
@@ -397,7 +458,7 @@ async function buildSnapshot(supabase: any, dojoId: string) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 15)
     .map(([id, n]) => ({
-      name: members.find((m: any) => m.id === id)?.name ?? "Unknown",
+      name: members.find((m) => m.id === id)?.name ?? "Unknown",
       noShowsLast90: n,
       bookingsLast90: booked90.get(id) ?? 0,
     }));
@@ -418,9 +479,10 @@ async function buildSnapshot(supabase: any, dojoId: string) {
       discipline: m.discipline,
       plan: m.plan,
       lastSeen: m.lastSeen,
-      lifetimeMonthsActive: m.joined && m.lastSeen
-        ? Math.max(1, Math.round(daysBetween(new Date(m.joined), new Date(m.lastSeen)) / 30))
-        : null,
+      lifetimeMonthsActive:
+        m.joined && m.lastSeen
+          ? Math.max(1, Math.round(daysBetween(new Date(m.joined), new Date(m.lastSeen)) / 30))
+          : null,
       lifetimePaid_usd: m.lifetimePaid_usd,
     }));
   const churnedAvgLifetimeMonths = churnedLastYear.length
@@ -456,9 +518,9 @@ async function buildSnapshot(supabase: any, dojoId: string) {
   // ---- Aggregate-only block ----
   // These are the ONLY derived figures that may be sent to an AI model (see
   // ai-aggregate.ts). Everything here is a count, average or percentage.
-  const activeMembers = members.filter((m: any) => m.status === "active");
+  const activeMembers = members.filter((m) => m.status === "active");
   const sumVisits = (map: Map<string, number>) =>
-    activeMembers.reduce((s, m: any) => s + (map.get(m.id) ?? 0), 0);
+    activeMembers.reduce((s, m) => s + (map.get(m.id) ?? 0), 0);
   const avg = (n: number, d: number) => (d ? Number((n / d).toFixed(2)) : 0);
 
   const bandOf = (n: number) => (n === 0 ? "0" : n <= 3 ? "1-3" : n <= 7 ? "4-7" : "8+");
@@ -468,7 +530,7 @@ async function buildSnapshot(supabase: any, dojoId: string) {
     ["4-7", 0],
     ["8+", 0],
   ]);
-  activeMembers.forEach((m: any) => {
+  activeMembers.forEach((m) => {
     const b = bandOf(visit30.get(m.id) ?? 0);
     bandCounts.set(b, (bandCounts.get(b) ?? 0) + 1);
   });
@@ -478,7 +540,7 @@ async function buildSnapshot(supabase: any, dojoId: string) {
 
   // Average months at current belt, grouped by belt colour.
   const beltMonths = new Map<string, { months: number; members: number }>();
-  activeMembers.forEach((m: any) => {
+  activeMembers.forEach((m) => {
     const since = beltSince.get(m.id) ?? m.joined_at;
     if (!since || !m.belt_color) return;
     const months = Math.max(0, daysBetween(new Date(since), now) / 30.44);
@@ -489,11 +551,11 @@ async function buildSnapshot(supabase: any, dojoId: string) {
   });
 
   const d90Date = d90;
-  const joinedLast90 = members.filter((m: any) => m.joined_at && new Date(m.joined_at) >= d90Date);
-  const convertedLast90 = joinedLast90.filter((m: any) => m.status === "active");
+  const joinedLast90 = members.filter((m) => m.joined_at && new Date(m.joined_at) >= d90Date);
+  const convertedLast90 = joinedLast90.filter((m) => m.status === "active");
 
   const aggregate = {
-    referredMemberCount: members.filter((m: any) => (m.referred_by ?? "").trim().length > 0).length,
+    referredMemberCount: members.filter((m) => (m.referred_by ?? "").trim().length > 0).length,
     avgSessionsPerActiveMember30d: avg(sumVisits(visit30), activeMembers.length),
     avgSessionsPerActiveMember90d: avg(sumVisits(visit90), activeMembers.length),
     sessionBands30d: [...bandCounts.entries()].map(([band, count]) => ({ band, count })),
@@ -512,7 +574,7 @@ async function buildSnapshot(supabase: any, dojoId: string) {
           ).toFixed(2),
         )
       : 0,
-    promotionsLast90d: promotions.filter((p: any) => new Date(p.promoted_at) >= d90Date).length,
+    promotionsLast90d: promotions.filter((p) => new Date(p.promoted_at) >= d90Date).length,
     avgMonthsAtBelt: [...beltMonths.entries()].map(([belt, v]) => ({
       belt,
       members: v.members,
@@ -603,7 +665,9 @@ export const askSensei = createServerFn({ method: "POST" })
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return { reply: null, error: "AI is not configured." };
 
-    const rawSnapshot = data.snapshot ? (data.snapshot as any) : await buildSnapshot(context.supabase, data.dojoId);
+    const rawSnapshot = data.snapshot
+      ? data.snapshot
+      : await buildSnapshot(context.supabase, data.dojoId);
 
     // GDPR: only AGGREGATED, ANONYMISED statistics may leave the system. The
     // whitelist in ai-aggregate.ts strips every per-member row, identifier and
@@ -641,9 +705,6 @@ export const askSensei = createServerFn({ method: "POST" })
         }
       : null;
 
-
-
-
     const system = `You are Sensei — a martial arts gym retention consultant sitting beside the gym owner, looking at their live numbers.
 
 WHAT YOU KNOW ABOUT MARTIAL ARTS GYMS (reason WITH this, don't recite it):
@@ -672,7 +733,6 @@ ${namedMemberAsked ? "- The user asked about a specific member. Answer with the 
 ${pageContext ? `PAGE CONTEXT (where the user is right now):\n${JSON.stringify(pageContext)}\n` : ""}
 AGGREGATE GYM STATISTICS (JSON):
 ${JSON.stringify(snapshot)}`;
-
 
     return callSensei({
       client: new Anthropic({ apiKey }),

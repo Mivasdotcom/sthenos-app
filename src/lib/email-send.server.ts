@@ -1,7 +1,15 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { isDomainNotVerified, sendEmail } from "./email-provider.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import type { Database, Json } from "@/integrations/supabase/types";
 import { PUBLIC_SITE_URL } from "./site";
 import { normaliseDomain, resolveFromLocalPart } from "./email-sender-identity.ts";
+
+/** Body of a Google DNS-over-HTTPS (`dns.google/resolve`) response. */
+type DnsJsonResponse = { Answer?: { data?: unknown }[] };
+
+/** The fields read from a thrown provider error. */
+type ProviderError = { status?: unknown; message?: unknown };
 
 /**
  * Single verified platform sending domain. Every email leaves from this
@@ -16,7 +24,6 @@ export const SENDING_DOMAIN = normaliseDomain(process.env.EMAIL_SENDING_DOMAIN, 
 /** Local part of the platform sender. */
 export const FROM_LOCAL_PART = resolveFromLocalPart(process.env.EMAIL_SENDING_LOCAL_PART);
 export const FROM_ADDRESS = `${FROM_LOCAL_PART}@${SENDING_DOMAIN}`;
-
 
 export type SendingStatus = {
   verified: boolean;
@@ -48,8 +55,8 @@ async function dnsLooksVerified(domain: string): Promise<boolean | null> {
         { headers: { accept: "application/dns-json" } },
       );
       if (!res.ok) return null;
-      const body: any = await res.json();
-      const answers: any[] = Array.isArray(body?.Answer) ? body.Answer : [];
+      const body = (await res.json()) as DnsJsonResponse;
+      const answers = Array.isArray(body?.Answer) ? body.Answer : [];
       return answers.map((a) => String(a?.data ?? ""));
     } catch {
       return null;
@@ -113,7 +120,6 @@ export async function getSendingStatus(force = false): Promise<SendingStatus> {
   return status;
 }
 
-
 function setStatus(patch: Partial<SendingStatus>) {
   const current = statusCache?.status ?? {
     domain: SENDING_DOMAIN,
@@ -144,7 +150,6 @@ function htmlToText(html: string): string {
     .trim();
 }
 
-
 export type SenderIdentity = {
   fromName: string;
   fromAddress: string;
@@ -156,7 +161,11 @@ export type SenderIdentity = {
  * They are treated as "not set" so the real defaults win.
  */
 const PLACEHOLDER_NAMES = ["your dojo", "your gym", "dojo connect", "xalarosi"];
-const PLACEHOLDER_ADDRESSES = ["onboarding@resend.dev", "you@yourgym.com", "notify@notify.sthenos.live"];
+const PLACEHOLDER_ADDRESSES = [
+  "onboarding@resend.dev",
+  "you@yourgym.com",
+  "notify@notify.sthenos.live",
+];
 
 function explicitName(value: string | null | undefined): string | null {
   const v = value?.trim();
@@ -178,10 +187,21 @@ function explicitAddress(value: string | null | undefined): string | null {
  * Defaults: the dojo's own name, and the gym OWNER's account email. A stored
  * value only wins when the owner explicitly set one (placeholders ignored).
  */
-export async function resolveSenderIdentity(supabase: any, dojoId: string): Promise<SenderIdentity> {
+export async function resolveSenderIdentity(
+  supabase: SupabaseClient<Database>,
+  dojoId: string,
+): Promise<SenderIdentity> {
   const [{ data: settings }, { data: dojo }] = await Promise.all([
-    supabase.from("email_settings").select("from_name, from_address").eq("dojo_id", dojoId).maybeSingle(),
-    supabase.from("dojos").select("name, contact_email, owner_user_id").eq("id", dojoId).maybeSingle(),
+    supabase
+      .from("email_settings")
+      .select("from_name, from_address")
+      .eq("dojo_id", dojoId)
+      .maybeSingle(),
+    supabase
+      .from("dojos")
+      .select("name, contact_email, owner_user_id")
+      .eq("id", dojoId)
+      .maybeSingle(),
   ]);
 
   // The owner's auth account email is the default reply-to.
@@ -206,7 +226,6 @@ export async function resolveSenderIdentity(supabase: any, dojoId: string): Prom
     replyTo: explicitAddress(settings?.from_address) || ownerEmail || null,
   };
 }
-
 
 /**
  * Every recipient gets a durable unsubscribe token. The provider REQUIRES an
@@ -266,8 +285,6 @@ async function unsubscribeFor(email: string): Promise<{ token: string; url: stri
   return { token, url: `${PUBLIC_SITE_URL}/unsubscribe?token=${token}` };
 }
 
-
-
 async function logSend(row: {
   messageId: string | null;
   templateName: string;
@@ -283,7 +300,7 @@ async function logSend(row: {
       recipient_email: row.recipient,
       status: row.status,
       error_message: row.error ?? null,
-      metadata: (row.metadata ?? {}) as any,
+      metadata: (row.metadata ?? {}) as Json,
     });
   } catch {
     // Logging must never break a send.
@@ -340,7 +357,7 @@ export async function suppressionFor(
     .limit(1)
     .maybeSingle();
   if (!data) return null;
-  const reason = String((data as any).reason ?? "unknown").toLowerCase();
+  const reason = String(data.reason ?? "unknown").toLowerCase();
   return { reason, blocksTransactional: !MARKETING_ONLY_SUPPRESSION_REASONS.has(reason) };
 }
 
@@ -371,7 +388,7 @@ async function inRateLimitCooldown(): Promise<boolean> {
       .select("retry_after_until")
       .limit(1)
       .maybeSingle();
-    const until = (data as any)?.retry_after_until as string | null | undefined;
+    const until = data?.retry_after_until;
     return !!until && new Date(until) > new Date();
   } catch {
     return false;
@@ -388,7 +405,7 @@ async function enqueueForRetry(payload: Record<string, unknown>): Promise<boolea
   try {
     const { error } = await supabaseAdmin.rpc("enqueue_email", {
       queue_name: "transactional_emails",
-      payload: { ...payload, queued_at: new Date().toISOString() } as any,
+      payload: { ...payload, queued_at: new Date().toISOString() } as Json,
     });
     if (error) {
       console.error("[email] enqueue for retry failed", error);
@@ -400,7 +417,6 @@ async function enqueueForRetry(payload: Record<string, unknown>): Promise<boolea
     return false;
   }
 }
-
 
 /** Stable, filesystem/header-safe idempotency key. */
 function normaliseKey(raw: string): string {
@@ -432,11 +448,10 @@ export async function sendAppEmail(args: {
    */
   marketing?: boolean;
   sender?: SenderIdentity;
-  supabase?: any;
+  supabase?: SupabaseClient<Database>;
   memberId?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<SendResult> {
-
   const to = args.to?.trim();
   if (!to) return { ok: false, pending: false, error: "No email address on file" };
 
@@ -454,7 +469,6 @@ export async function sendAppEmail(args: {
   }
   const fromName = sender?.fromName?.trim() || "Your gym";
   const replyTo = sender?.replyTo ?? null;
-
 
   // Deterministic per-send key: stable on retry, unique per intended send.
   // Bind the provider run to its recipient. A reused business-event key can
@@ -491,7 +505,6 @@ export async function sendAppEmail(args: {
    */
   const providerPurpose = "transactional";
 
-
   const baseMeta = {
     dojo_id: args.dojoId,
     member_id: args.memberId ?? null,
@@ -505,7 +518,6 @@ export async function sendAppEmail(args: {
 
     ...(args.metadata ?? {}),
   };
-
 
   // SUPPRESSION GATE — see the policy note above. Unsubscribes block marketing
   // only; bounces/complaints block everything.
@@ -565,7 +577,6 @@ export async function sendAppEmail(args: {
   // changes, cancellations, password resets) still gets delivered.
   const html = args.html;
 
-
   // Exactly the shape the email queue worker hands to the provider.
   const queueMessageId = crypto.randomUUID();
   const retryPayload: Record<string, unknown> = {
@@ -619,10 +630,6 @@ export async function sendAppEmail(args: {
     return { ok: false, pending: true, error: PENDING_MESSAGE };
   }
 
-
-
-
-
   try {
     const res = await sendEmail(
       {
@@ -650,9 +657,10 @@ export async function sendAppEmail(args: {
       metadata: baseMeta,
     });
     return { ok: true, providerId };
-  } catch (e: any) {
-    const statusCode: number | null = typeof e?.status === "number" ? e.status : null;
-    const message = String(e?.message ?? "Send failed");
+  } catch (e: unknown) {
+    const err = e as ProviderError | null | undefined;
+    const statusCode: number | null = typeof err?.status === "number" ? err.status : null;
+    const message = String(err?.message ?? "Send failed");
     if (isDomainNotVerified(statusCode, message)) {
       setStatus({ verified: false, canAttempt: false, reason: "Pending domain verification." });
       await logSend({
@@ -662,11 +670,12 @@ export async function sendAppEmail(args: {
         status: "pending",
         error: message,
         metadata: { ...baseMeta, retry_subject: args.subject, retry_html: args.html },
-
       });
       return { ok: false, pending: true, error: PENDING_MESSAGE };
     }
-    const error = statusCode ? `Provider error ${statusCode}: ${message.slice(0, 300)}` : message.slice(0, 300);
+    const error = statusCode
+      ? `Provider error ${statusCode}: ${message.slice(0, 300)}`
+      : message.slice(0, 300);
     // Transient failures (429 / 5xx / network) go to the durable retry queue
     // rather than being reported as a permanent failure.
     if (isTransient(statusCode, message)) {
@@ -692,10 +701,8 @@ export async function sendAppEmail(args: {
       metadata: { ...baseMeta, retry_subject: args.subject, retry_html: args.html },
     });
     return { ok: false, pending: false, error };
-
   }
 }
-
 
 export function escapeHtml(s: string): string {
   return s
