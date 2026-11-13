@@ -56,7 +56,7 @@ function verify(body, headers, secret = SECRET) {
 test("a correctly signed recovery payload is accepted and mapped", () => {
   const body = JSON.stringify(payload());
 
-  const result = verify(body, signedHeaders(body));
+  const [result] = verify(body, signedHeaders(body));
 
   assert.equal(result.webhookId, WEBHOOK_ID);
   assert.equal(result.emailType, "recovery");
@@ -126,33 +126,131 @@ test("a missing webhook-id header is rejected with 400", () => {
   );
 });
 
-test("email_change sends one email to new_email using the _new hashes", () => {
-  const body = JSON.stringify(
+function emailChangeBody({ userOverrides = {}, dataOverrides = {} } = {}) {
+  return JSON.stringify(
     payload({
-      user: { email: "old@example.com", new_email: "new@example.com" },
+      user: { email: "old@example.com", new_email: "new@example.com", ...userOverrides },
       email_data: {
         email_action_type: "email_change",
         token: "111111",
-        token_hash: "hash-old",
+        token_hash: "hash-new-addr",
         token_new: "222222",
-        token_hash_new: "hash-new",
+        token_hash_new: "hash-cur-addr",
+        ...dataOverrides,
       },
     }),
   );
+}
 
-  const result = verify(body, signedHeaders(body));
+function confirmationUrlFor(hash) {
+  return `${SUPABASE_URL}/auth/v1/verify?token=${hash}&type=email_change&redirect_to=${encodeURIComponent(
+    "https://app.example.com/reset?x=1",
+  )}`;
+}
 
-  assert.equal(result.emailType, "email_change");
-  assert.equal(result.recipient, "new@example.com");
-  assert.equal(result.templateProps.newEmail, "new@example.com");
-  assert.equal(result.templateProps.oldEmail, "old@example.com");
-  assert.equal(result.templateProps.token, "222222");
-  assert.equal(
-    result.templateProps.confirmationUrl,
-    `${SUPABASE_URL}/auth/v1/verify?token=hash-new&type=email_change&redirect_to=${encodeURIComponent(
-      "https://app.example.com/reset?x=1",
-    )}`,
+test("secure email change sends two emails: the current address gets token_hash_new and token", () => {
+  const body = emailChangeBody();
+
+  const emails = verify(body, signedHeaders(body));
+  const [current] = emails;
+
+  assert.equal(emails.length, 2);
+  assert.equal(current.emailType, "email_change");
+  assert.equal(current.recipient, "old@example.com");
+  assert.equal(current.templateProps.email, "old@example.com");
+  assert.equal(current.templateProps.token, "111111");
+  assert.equal(current.templateProps.confirmationUrl, confirmationUrlFor("hash-cur-addr"));
+});
+
+test("secure email change: the new address gets token_hash and token_new", () => {
+  const body = emailChangeBody();
+
+  const [, fresh] = verify(body, signedHeaders(body));
+
+  assert.equal(fresh.emailType, "email_change");
+  assert.equal(fresh.recipient, "new@example.com");
+  assert.equal(fresh.templateProps.email, "new@example.com");
+  assert.equal(fresh.templateProps.token, "222222");
+  assert.equal(fresh.templateProps.confirmationUrl, confirmationUrlFor("hash-new-addr"));
+});
+
+test("secure email change: both emails carry oldEmail and newEmail", () => {
+  const body = emailChangeBody();
+
+  for (const email of verify(body, signedHeaders(body))) {
+    assert.equal(email.templateProps.oldEmail, "old@example.com");
+    assert.equal(email.templateProps.newEmail, "new@example.com");
+  }
+});
+
+test("secure email change: the two emails never share a hash or a token (a swap would be caught)", () => {
+  const body = emailChangeBody();
+
+  const [current, fresh] = verify(body, signedHeaders(body));
+
+  assert.notEqual(current.templateProps.confirmationUrl, fresh.templateProps.confirmationUrl);
+  assert.notEqual(current.templateProps.token, fresh.templateProps.token);
+});
+
+test("secure OFF (only token_hash): one email to new_email with token_hash", () => {
+  const body = emailChangeBody({
+    dataOverrides: { token_hash_new: "", token_new: "", token: "333333", token_hash: "hash-only" },
+  });
+
+  const emails = verify(body, signedHeaders(body));
+
+  assert.equal(emails.length, 1);
+  assert.equal(emails[0].recipient, "new@example.com");
+  assert.equal(emails[0].templateProps.token, "333333");
+  assert.equal(emails[0].templateProps.confirmationUrl, confirmationUrlFor("hash-only"));
+});
+
+test("only token_hash_new present: one email to new_email with token_hash_new", () => {
+  const body = emailChangeBody({
+    dataOverrides: {
+      token_hash: "",
+      token_new: "",
+      token: "444444",
+      token_hash_new: "hash-lone-new",
+    },
+  });
+
+  const emails = verify(body, signedHeaders(body));
+
+  assert.equal(emails.length, 1);
+  assert.equal(emails[0].recipient, "new@example.com");
+  assert.equal(emails[0].templateProps.token, "444444");
+  assert.equal(emails[0].templateProps.confirmationUrl, confirmationUrlFor("hash-lone-new"));
+});
+
+test("email_change with neither hash present is rejected with 400", () => {
+  const body = emailChangeBody({
+    dataOverrides: { token_hash: "", token_hash_new: "" },
+  });
+
+  assert.throws(
+    () => verify(body, signedHeaders(body)),
+    (err) => err instanceof HookError && err.status === 400,
   );
+});
+
+test("email_change without user.new_email is rejected with 400", () => {
+  const body = emailChangeBody({ userOverrides: { new_email: undefined } });
+
+  assert.throws(
+    () => verify(body, signedHeaders(body)),
+    (err) => err instanceof HookError && err.status === 400,
+  );
+});
+
+test("a non-email_change type still maps to a one-element array (positive control)", () => {
+  const body = JSON.stringify(payload({ email_data: { email_action_type: "recovery" } }));
+
+  const emails = verify(body, signedHeaders(body));
+
+  assert.equal(emails.length, 1);
+  assert.equal(emails[0].recipient, "member@example.com");
+  assert.equal(emails[0].emailType, "recovery");
 });
 
 test("when several signatures are sent, a valid second entry is accepted", () => {
@@ -161,7 +259,7 @@ test("when several signatures are sent, a valid second entry is accepted", () =>
   const headers = signedHeaders(body);
   headers.set("webhook-signature", `${bogus} ${sign(body)}`);
 
-  const result = verify(body, headers);
+  const [result] = verify(body, headers);
 
   assert.equal(result.emailType, "recovery");
 });
@@ -170,7 +268,7 @@ test("a secret given without the v1,whsec_ prefix still verifies", () => {
   const body = JSON.stringify(payload());
   const bareSecret = Buffer.from(RAW_KEY).toString("base64");
 
-  const result = verify(body, signedHeaders(body), bareSecret);
+  const [result] = verify(body, signedHeaders(body), bareSecret);
 
   assert.equal(result.emailType, "recovery");
 });

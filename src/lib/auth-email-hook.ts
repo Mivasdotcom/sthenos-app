@@ -47,7 +47,8 @@ export interface VerifiedAuthEmail {
 const MAX_CLOCK_SKEW_SECONDS = 300;
 
 /**
- * Verifies the signature and timestamp, then parses and maps the payload.
+ * Verifies the signature and timestamp, then parses and maps the payload to the
+ * emails to send (usually one; two for a secure email change).
  * Throws HookError with the HTTP status the caller should answer with.
  */
 export function verifyAndParseHook(
@@ -56,7 +57,7 @@ export function verifyAndParseHook(
   secret: string,
   supabaseUrl: string,
   nowSeconds = Math.floor(Date.now() / 1000),
-): VerifiedAuthEmail {
+): VerifiedAuthEmail[] {
   const webhookId = headers.get("webhook-id");
   const timestampHeader = headers.get("webhook-timestamp");
   const signatureHeader = headers.get("webhook-signature");
@@ -141,41 +142,68 @@ function parseBody(rawBody: string): RawPayload {
   };
 }
 
+/**
+ * Maps the payload to the emails to send: one for most types, two for a secure email change.
+ *
+ * Secure Email Change ON: Supabase generates two OTPs, one for the current address and one
+ * for the new address. The hash field names are reversed for backward compatibility
+ * (Supabase Send Email Hook docs: "The token hash field names are reversed due to backward
+ * compatibility"):
+ *   current address (user.email)     -> token_hash_new + token
+ *   new address (user.new_email)     -> token_hash     + token_new
+ *
+ * Secure Email Change OFF: one OTP, sent only to the new address. It uses token_hash, or
+ * token_hash_new when that is the only hash present, with token || token_new.
+ */
 function mapPayload(
   payload: RawPayload,
   webhookId: string,
   supabaseUrl: string,
-): VerifiedAuthEmail {
+): VerifiedAuthEmail[] {
   const actionType = payload.email_data.email_action_type;
   if (!isAuthEmailType(actionType)) {
     throw new HookError(400, `Unknown email action type: ${actionType}`);
   }
 
   const { user, email_data: data } = payload;
-  const isEmailChange = actionType === "email_change";
-
-  // An email change goes to the NEW address, using the _new token when Supabase sent one.
-  const recipient = isEmailChange ? (user.new_email ?? user.email) : user.email;
-  const hash = isEmailChange && data.token_hash_new ? data.token_hash_new : data.token_hash;
-  const token = isEmailChange && data.token_new ? data.token_new : data.token;
-
   const base = supabaseUrl.replace(/\/+$/, "");
-  const confirmationUrl =
-    `${base}/auth/v1/verify?token=${encodeURIComponent(hash)}` +
-    `&type=${actionType}&redirect_to=${encodeURIComponent(data.redirect_to)}`;
 
-  return {
+  const build = (recipient: string, hash: string, token: string): VerifiedAuthEmail => ({
     webhookId,
     emailType: actionType,
     recipient,
     templateProps: {
-      confirmationUrl,
+      confirmationUrl:
+        `${base}/auth/v1/verify?token=${encodeURIComponent(hash)}` +
+        `&type=${actionType}&redirect_to=${encodeURIComponent(data.redirect_to)}`,
       token,
       email: recipient,
       newEmail: user.new_email,
       oldEmail: user.email,
     },
-  };
+  });
+
+  if (actionType !== "email_change") {
+    return [build(user.email, data.token_hash, data.token)];
+  }
+
+  const newEmail = user.new_email;
+  if (!newEmail) {
+    throw new HookError(400, "email_change payload has no user.new_email");
+  }
+
+  if (data.token_hash && data.token_hash_new) {
+    return [
+      build(user.email, data.token_hash_new, data.token),
+      build(newEmail, data.token_hash, data.token_new),
+    ];
+  }
+
+  const hash = data.token_hash || data.token_hash_new;
+  if (!hash) {
+    throw new HookError(400, "email_change payload has no token hash");
+  }
+  return [build(newEmail, hash, data.token || data.token_new)];
 }
 
 function isAuthEmailType(value: string): value is AuthEmailType {

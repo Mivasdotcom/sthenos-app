@@ -404,7 +404,147 @@ describe("happy path", () => {
 
     assert.equal(result.status, 200);
     assert.deepEqual(brandLookups, ["old@example.com"]);
-    assert.equal(renders[0].props.recipient, "new@example.com");
+    assert.equal(renders.length, 2, "a secure email change renders one email per address");
+    assert.equal(renders[0].props.recipient, "old@example.com");
+    assert.equal(renders[1].props.recipient, "new@example.com");
+  });
+});
+
+const CURRENT_ADDRESS = "old@example.com";
+const NEW_ADDRESS = "new@example.com";
+
+/** A secure email change: Supabase sends two OTPs, one per address. */
+function secureEmailChangeBody() {
+  return JSON.stringify({
+    user: { id: "user-1", email: CURRENT_ADDRESS, new_email: NEW_ADDRESS },
+    email_data: {
+      token: "111111",
+      token_hash: "hash-new-addr",
+      token_new: "222222",
+      token_hash_new: "hash-cur-addr",
+      redirect_to: "https://app.example.com/",
+      email_action_type: "email_change",
+      site_url: SITE_URL,
+    },
+  });
+}
+
+/** Renders the confirmation URL into the html so each payload can be checked. */
+const renderShowingUrl = (_emailType, props) => ({
+  html: `<a href="${props.confirmationUrl}">${props.recipient}</a>`,
+  text: props.recipient,
+});
+
+describe("secure email change", () => {
+  it("enqueues one email to each address, each with its own confirmation link", async () => {
+    silenceConsole();
+    const { deps, supabase, renders } = makeDeps({ render: renderShowingUrl });
+
+    const result = await run(signedRequest(secureEmailChangeBody()), deps);
+
+    assert.deepEqual(result, { status: 200, body: {} });
+    assert.equal(supabase.log.rpc.length, 2);
+    const [toCurrent, toNew] = supabase.log.rpc.map((call) => call.args.payload);
+    assert.equal(toCurrent.to, CURRENT_ADDRESS);
+    assert.equal(toNew.to, NEW_ADDRESS);
+
+    assert.ok(
+      toCurrent.html.includes(
+        `${SUPABASE_URL}/auth/v1/verify?token=hash-cur-addr&type=email_change`,
+      ),
+      "the current address must get token_hash_new",
+    );
+    assert.ok(
+      toNew.html.includes(`${SUPABASE_URL}/auth/v1/verify?token=hash-new-addr&type=email_change`),
+      "the new address must get token_hash",
+    );
+    assert.equal(renders.length, 2);
+    assert.equal(renders[0].props.token, "111111");
+    assert.equal(renders[1].props.token, "222222");
+  });
+
+  it("resolves branding once, from the current address", async () => {
+    silenceConsole();
+    const { deps, brandLookups } = makeDeps({ render: renderShowingUrl });
+
+    await run(signedRequest(secureEmailChangeBody()), deps);
+
+    assert.deepEqual(brandLookups, [CURRENT_ADDRESS]);
+  });
+
+  it("returns 500 when the second enqueue fails, after the first was queued", async () => {
+    silenceConsole();
+    const supabase = fakeSupabase({
+      rpc: (_name, args) =>
+        args.payload.to === NEW_ADDRESS
+          ? { data: null, error: { code: "XX000", message: "queue down" } }
+          : { data: null, error: null },
+    });
+    const { deps } = makeDeps({ supabase, render: renderShowingUrl });
+
+    const result = await run(signedRequest(secureEmailChangeBody()), deps);
+
+    assert.deepEqual(result, { status: 500, body: { error: "Failed to enqueue email" } });
+    assert.equal(supabase.log.rpc.length, 2);
+    const failed = logRows(supabase, "failed");
+    assert.equal(failed.length, 1);
+    assert.equal(failed[0].recipient_email, NEW_ADDRESS);
+  });
+
+  it("stops at the first failed enqueue and does not queue the second email", async () => {
+    silenceConsole();
+    const supabase = fakeSupabase({
+      rpc: () => ({ data: null, error: { code: "XX000", message: "queue down" } }),
+    });
+    const { deps } = makeDeps({ supabase, render: renderShowingUrl });
+
+    const result = await run(signedRequest(secureEmailChangeBody()), deps);
+
+    assert.deepEqual(result, { status: 500, body: { error: "Failed to enqueue email" } });
+    assert.equal(supabase.log.rpc.length, 1, "the second email must not be attempted");
+    assert.equal(supabase.log.rpc[0].args.payload.to, CURRENT_ADDRESS);
+  });
+});
+
+describe("enqueue error logging", () => {
+  it("logs only the error code and the redacted address, never the address or message text", async () => {
+    const captured = captureConsole();
+    const supabase = fakeSupabase({
+      // The RPC message echoes the clear address, as a Postgres error can.
+      rpc: () => ({
+        data: null,
+        error: { code: "42501", message: `permission denied for ${RECIPIENT}` },
+      }),
+    });
+    const { deps } = makeDeps({ supabase });
+
+    const result = await run(signedRequest(recoveryBody()), deps);
+
+    assert.equal(result.status, 500);
+    const enqueueFailures = captured.filter(
+      (entry) => entry.method === "error" && entry.args[0] === "Failed to enqueue auth email",
+    );
+    assert.equal(enqueueFailures.length, 1, "the enqueue failure must be logged");
+    assert.deepEqual(enqueueFailures[0].args[1], {
+      code: "42501",
+      run_id: WEBHOOK_ID,
+      emailType: "recovery",
+      email_redacted: REDACTED_RECIPIENT,
+    });
+
+    const everythingLogged = JSON.stringify(captured.map((entry) => entry.args));
+    assert.ok(
+      everythingLogged.includes(REDACTED_RECIPIENT),
+      "positive control: the redacted address is what was logged",
+    );
+    assert.ok(
+      !everythingLogged.includes(RECIPIENT),
+      "the clear recipient address must not appear in any console output",
+    );
+    assert.ok(
+      !everythingLogged.includes("permission denied"),
+      "the RPC error message text must not appear in any console output",
+    );
   });
 });
 

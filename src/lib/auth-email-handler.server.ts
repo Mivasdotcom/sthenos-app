@@ -127,10 +127,12 @@ async function enqueueOne({
   });
 
   if (enqueueError) {
+    // Same rule as the pending log: the RPC message can echo the address, so only the code is logged.
     console.error("Failed to enqueue auth email", {
-      error: enqueueError,
+      code: enqueueError.code ?? null,
       run_id: runId,
       emailType,
+      email_redacted: redactEmail(recipient),
     });
     await supabase.from("email_send_log").insert({
       message_id: messageId,
@@ -163,8 +165,8 @@ export async function handleAuthEmailHook(
     return Response.json({ error: "Server configuration error" }, { status: 500 });
   }
 
-  // Verify the Standard Webhooks signature and timestamp, then map the payload.
-  let verified: VerifiedAuthEmail;
+  // Verify the Standard Webhooks signature and timestamp, then map the payload to its emails.
+  let verified: VerifiedAuthEmail[];
   try {
     verified = verifyAndParseHook(raw, request.headers, secret, supabaseUrl);
   } catch (error) {
@@ -181,10 +183,13 @@ export async function handleAuthEmailHook(
     throw error;
   }
 
-  const { webhookId: run_id, emailType, recipient } = verified;
+  // Every email in one request shares the type and webhook id.
+  const [first] = verified;
+  const { webhookId: run_id, emailType } = first;
   console.log("Received auth event", {
     emailType,
-    email_redacted: redactEmail(recipient),
+    email_redacted: redactEmail(first.recipient),
+    emails: verified.length,
     run_id,
   });
 
@@ -200,36 +205,46 @@ export async function handleAuthEmailHook(
 
   // The gym name when the member belongs to exactly one live gym, otherwise the
   // product name. Never the project slug. For an email change, branding follows
-  // the member's current address.
-  const brand = await deps.resolveBrand(supabase, verified.templateProps.oldEmail ?? recipient);
+  // the member's current address, so it is resolved once for the whole request.
+  const brand = await deps.resolveBrand(supabase, first.templateProps.oldEmail ?? first.recipient);
 
-  const rendered = await deps.renderEmail(emailType, {
-    siteName: brand,
-    siteUrl: deps.siteUrl,
-    recipient,
-    confirmationUrl: verified.templateProps.confirmationUrl,
-    token: verified.templateProps.token,
-    email: recipient,
-    oldEmail: verified.templateProps.oldEmail,
-    newEmail: verified.templateProps.newEmail,
-  });
+  // Render every email before queuing any, so a missing template queues nothing.
+  const renderedEmails: { recipient: string; rendered: RenderedEmail }[] = [];
+  for (const email of verified) {
+    const rendered = await deps.renderEmail(emailType, {
+      siteName: brand,
+      siteUrl: deps.siteUrl,
+      recipient: email.recipient,
+      confirmationUrl: email.templateProps.confirmationUrl,
+      token: email.templateProps.token,
+      email: email.recipient,
+      oldEmail: email.templateProps.oldEmail,
+      newEmail: email.templateProps.newEmail,
+    });
 
-  if (!rendered) {
-    console.error("Unknown email type", { emailType, run_id });
-    return Response.json({ error: `Unknown email type: ${emailType}` }, { status: 400 });
+    if (!rendered) {
+      console.error("Unknown email type", { emailType, run_id });
+      return Response.json({ error: `Unknown email type: ${emailType}` }, { status: 400 });
+    }
+    renderedEmails.push({ recipient: email.recipient, rendered });
   }
 
-  const enqueued = await enqueueOne({
-    supabase,
-    deps,
-    runId: run_id,
-    emailType,
-    recipient,
-    brand,
-    rendered,
-  });
-  if (!enqueued) {
-    return Response.json({ error: "Failed to enqueue email" }, { status: 500 });
+  // Enqueue in order and stop at the first failure, answering 500 so Supabase
+  // treats the send as failed. An email already queued before the failure is not
+  // recalled, so a retry may send that one again.
+  for (const { recipient, rendered } of renderedEmails) {
+    const enqueued = await enqueueOne({
+      supabase,
+      deps,
+      runId: run_id,
+      emailType,
+      recipient,
+      brand,
+      rendered,
+    });
+    if (!enqueued) {
+      return Response.json({ error: "Failed to enqueue email" }, { status: 500 });
+    }
   }
 
   return Response.json({});
