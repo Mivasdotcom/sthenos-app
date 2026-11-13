@@ -447,11 +447,23 @@ The app owner needs the `schedule` of each job to fill in step (e).
 The script is `deploy/supabase/repoint-cron.sql` in the repository. It:
 
 - stores `CRON_SECRET` in Supabase Vault as `app_cron_secret`;
+- backs up each old HTTP cron job to `ops.cron_job_backup` before it removes
+  the job. A re-run never overwrites a backup row, so the original command is
+  kept. The `ops` schema is not readable by the API roles;
 - removes the old HTTP cron jobs (Lovable host or `/api/public/hooks/` in the
   command, plus the four known names). SQL-only jobs such as
   `enforce-overdue-grace` are not touched;
 - schedules four jobs that call the app. Each reads the token from Vault at run
   time, so the token never appears in `cron.job`.
+
+The `process-email-queue` job is guarded, as the original Lovable job was. It
+calls the app only when both of these hold:
+
+- the rate-limit cooldown is not active: `email_send_state.retry_after_until` is
+  empty or in the past;
+- the `auth_emails` or `transactional_emails` queue has messages.
+
+The other three jobs call the app on their schedule.
 
 Prerequisites:
 
@@ -500,6 +512,25 @@ select jobname, schedule from cron.job order by jobid;
 
 Expected: `enforce-overdue-grace` plus the four new jobs (`process-email-queue`,
 `membership-nightly`, `retention-nightly`, `scheduled-workflows`).
+
+#### Undo
+
+To put the old cron jobs back, run `deploy/supabase/restore-cron.sql` against the
+same database:
+
+```bash
+$ read -rs DB_URL && export DB_URL          # paste the connection string, press Enter
+$ psql "$DB_URL" -v ON_ERROR_STOP=1 -f deploy/supabase/restore-cron.sql
+$ unset DB_URL
+```
+
+The script removes the four new jobs and schedules each job in
+`ops.cron_job_backup` again, with its original name, schedule and command. It
+needs no variables and is safe to run twice.
+
+The backup holds the old commands as they were. A Lovable command may contain a
+service-role key. Once the switch is verified and no undo is needed, delete the
+backup with `drop table ops.cron_job_backup;`.
 
 ### (f) Clean up the old Lovable Vault secret
 
