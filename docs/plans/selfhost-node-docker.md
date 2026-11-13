@@ -1,5 +1,5 @@
 # Feature: selfhost-node-docker
-Status: FEASIBLE (follow-ups T15-T23)
+Status: IMPLEMENTED (follow-ups T15-T23)
 Note (2026-10-22): /check-feasibility was skipped at the user's explicit request. T3 is where the riskiest
 assumptions (Nitro entry, node-server preset) get tested first.
 
@@ -438,6 +438,7 @@ Checks (every task): `node scripts/security-gate.mjs`, `npm test`, `node scripts
 - **T21 (edge-case tests).** `auth-email-hook` tests: invalid JSON → 400; missing `user.email` → 400; missing `email_action_type` → 400; timestamp 301 s in the FUTURE → rejected. Add `email-queue-handler` tests for the duplicate-send skip, max-retries → DLQ, and a generic (non-429/403) send failure incrementing the attempt counter (untested paths found in T18). Raise `stripe.server.ts` coverage (currently 37.5% lines) with tests for its uncovered functions, including an unhappy path.
 - [x] T22 — sensei.functions.ts, email-send.server.ts, stripe-connect.server.ts, platform-billing.functions.ts: eslint 51/29/14/2 → 0 errors (prettier + 48 `any` replaced with generated Database row types / local interfaces; no eslint-disable) (commit b696bd7) — agent: type-erased JS diff shows only formatting, aliases and one hoisted constant; npm test 204/204, security-gate, authz 176, tsc 0, build 0. Every file changed since 294cec5 is now 0 eslint errors.
 - **T22 (lint).** `src/routes/api/public/hooks/auth-email.ts` and `email-queue.ts` (and every file touched in T15-T21) reach 0 eslint errors without behaviour change (`no-explicit-any` replaced with real types).
+- [x] T23 — controller, clean `git worktree` of 885de25: `npm ci` 0; security-gate pass (5 checks); `npm test` 204/204; authorisation-gate 176 guarded, 12 role sets unchanged; `tsc` 0; build 0 (preset node-server); eslint 0 errors on all 20 .ts/.mjs files changed since 294cec5. Built server: health {"ok":true}, `/` 200, `/login` 307 / `-L` 200 (AC3 as amended), `/mcp` 404, email-queue no auth 401 / correct secret + env missing 500, 3 cron hooks no auth 401, auth-email unsigned 400 / bad sig 401, 0 `Invalid URL`. Docker: build with args 0, `id -u` 1000, no-args build exit 1, container health {"ok":true}, email-queue with unreachable Supabase → 500 "Failed to read email state" (T18 behaviour), 0 `Invalid URL`. Worktree removed.
 - **T23 (final verification).** Controller, in a clean `git worktree` of the final commit: all CI checks, eslint on every touched file, coverage numbers, AC3/AC11 re-run. Then re-audit.
 
 ## Feasibility (follow-ups, 2026-11-13)
