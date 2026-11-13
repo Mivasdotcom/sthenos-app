@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { SITE_URL } from "@/lib/site";
+import { envOptional } from "@/lib/env";
 import {
   createStripeClient,
   getStripeEnv,
@@ -51,7 +52,7 @@ export const createPlatformCheckoutSession = createServerFn({ method: "POST" })
       const price = prices.data[0];
 
       const origin = (
-        process.env.APP_URL ?? process.env.SITE_URL ?? SITE_URL
+        envOptional(process.env.APP_URL) ?? envOptional(process.env.SITE_URL) ?? SITE_URL
       ).replace(/\/$/, "");
       const returnPath = data.returnPath ?? "/settings/payments";
 

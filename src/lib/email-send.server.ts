@@ -1,6 +1,7 @@
 import { sendEmail } from "./email-provider.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { PUBLIC_SITE_URL } from "./site";
+import { normaliseDomain, resolveFromLocalPart } from "./email-sender-identity.ts";
 
 /**
  * Single verified platform sending domain. Every email leaves from this
@@ -11,16 +12,9 @@ import { PUBLIC_SITE_URL } from "./site";
  * string-built by appending a subdomain, which previously produced the
  * doubled "notify@notify.sthenos.live".
  */
-function normaliseDomain(raw: string | undefined): string {
-  const value = (raw ?? `notify.${new URL(PUBLIC_SITE_URL).hostname}`).trim().toLowerCase();
-  // Tolerate a full address or a URL being configured by mistake.
-  const host = value.includes("@") ? value.split("@").pop()! : value.replace(/^https?:\/\//, "");
-  return host.replace(/\/.*$/, "").replace(/^\.+|\.+$/g, "");
-}
-
-export const SENDING_DOMAIN = normaliseDomain(process.env.EMAIL_SENDING_DOMAIN);
+export const SENDING_DOMAIN = normaliseDomain(process.env.EMAIL_SENDING_DOMAIN, PUBLIC_SITE_URL);
 /** Local part of the platform sender. */
-export const FROM_LOCAL_PART = (process.env.EMAIL_SENDING_LOCAL_PART ?? "noreply").trim().toLowerCase();
+export const FROM_LOCAL_PART = resolveFromLocalPart(process.env.EMAIL_SENDING_LOCAL_PART);
 export const FROM_ADDRESS = `${FROM_LOCAL_PART}@${SENDING_DOMAIN}`;
 
 

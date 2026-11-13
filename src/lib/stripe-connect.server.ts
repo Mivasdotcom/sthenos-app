@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { SITE_URL } from "@/lib/site";
+import { envOptional } from "@/lib/env";
 
 /**
  * BYOK Stripe Connect client — uses the platform's own STRIPE_SECRET_KEY
@@ -480,7 +481,7 @@ export async function verifyConnectWebhook(
 }
 
 export function getOrigin(): string {
-  const env = process.env.APP_URL ?? process.env.SITE_URL;
+  const env = envOptional(process.env.APP_URL) ?? envOptional(process.env.SITE_URL);
   if (env) return env.replace(/\/$/, "");
   return SITE_URL;
 }

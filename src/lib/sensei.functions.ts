@@ -6,6 +6,7 @@ import { scoreRetentionRisk } from "@/lib/retention";
 import { assessReadiness } from "@/lib/belt-readiness";
 import { assertDojoStaff } from "@/lib/dojo-access";
 import { callSensei } from "./sensei-llm.server";
+import { envOr } from "./env.ts";
 
 const MessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -675,7 +676,7 @@ ${JSON.stringify(snapshot)}`;
 
     return callSensei({
       client: new Anthropic({ apiKey }),
-      model: process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5",
+      model: envOr(process.env.ANTHROPIC_MODEL, "claude-opus-5-5"),
       system,
       messages,
     });
