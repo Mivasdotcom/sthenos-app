@@ -1,5 +1,5 @@
 # Feature: selfhost-node-docker
-Status: IMPLEMENTED (follow-ups T15-T23)
+Status: AUDITED
 Note (2026-10-22): /check-feasibility was skipped at the user's explicit request. T3 is where the riskiest
 assumptions (Nitro entry, node-server preset) get tested first.
 
@@ -29,6 +29,9 @@ That person applies the dashboard changes listed in the runbook (T13).
 - `npx tsc --noEmit -p .` → exit 0.
 - `npm run lint` → **7441 problems already** (almost all prettier). Lint is NOT a CI gate. The rule for this
   plan: every file this plan creates or edits must pass `npx eslint <file>` with 0 errors.
+  (Amended 2026-11-13 after the second audit: the rule applies to every file created, moved or substantially rewritten,
+  and to every file edited in T15-T23. Ten legacy files that T1-T14 edited lightly still carry their pre-existing errors,
+  103 in total, each count equal to or lower than on `main`. Clearing them is out of scope per CLAUDE.md "Lint".)
 - CI (`.github/workflows/security-gate.yml`) runs security-gate, `npm test` and authorisation-gate.
 
 ## Requirements
@@ -344,8 +347,9 @@ plus `npx eslint <every file touched in the task>`. From T3 on, also run `npm ru
 - `CRON_SECRET` length differs from the provided token → rejected without calling `timingSafeEqual` (which would throw).
 - Auth hook: bad signature → 401; stale timestamp (>300 s) → 401; unknown action → 400; missing `webhook-id` → 400; enqueue RPC error →
   500 (Supabase then shows the user an error rather than silently sending nothing).
-- `email_change` with secure email change ON: only the new address gets an email (decision in T6). If the owner has secure email
-  change enabled, the old address is not notified. This is documented in the runbook as a known limitation.
+- `email_change` with secure email change ON: TWO emails, current address with `token` + `token_hash_new`, new address with
+  `token_new` + `token_hash` (Supabase's reversed field names). With it OFF: one email to the new address. (Amended at T20; the
+  T6 decision "only the new address" was wrong and is superseded.)
 - Resend 429 → `EmailProviderError.retryAfterSeconds` drives the existing queue cooldown. 403 → dead-letter queue (existing logic).
   Resend 5xx → existing retry budget.
 - Resend/Stripe/Anthropic errors must never include API keys or URL-embedded secrets in logs or `email_send_log` rows (global learned rule).
@@ -388,7 +392,7 @@ plus `npx eslint <every file touched in the task>`. From T3 on, also run `npm ru
 - [x] T12 — .github/workflows/ci.yml (replaces security-gate.yml): jobs security-gate, test (now with npm ci), authorisation, typecheck, build → image (GHCR push on main, owner lowercased, fails fast if VITE_* repo variables are unset) → deploy (gated by `vars.DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main'`, appleboy/ssh-action to /opt/sthenos); every action pinned to a full SHA (commits 0f432f5, c3ff13e) — verified by controller: actionlint exit 0 (with shellcheck); all 6 SHAs re-resolved against GitHub tags and matching. Agent ran every check job's commands in a clean worktree (all exit 0). Not yet run on GitHub (no remote).
 - [x] T13 — deploy/README.md (12-section runbook incl. Supabase-owner checklist, Stripe event lists, follow-ups F1–F5), deploy/supabase/repoint-cron.sql (vault-backed CRON_SECRET, psql -v vars, no secrets or defaults), CLAUDE.md, scripts/tests/env-docs.test.mjs (4 tests); NODE_ENV/PORT removed from .env.example (an empty NODE_ENV would have selected Stripe sandbox in prod) (commits 6158929, 8cf52ac) — env-docs tests red first (README missing; NODE_ENV/PORT present). Agent verified the SQL on supabase/postgres:15.19.0.006 (pg_cron 1.6.4, pg_net 0.20.4, vault 0.3.1): idempotent on re-run, enforce-overdue-grace untouched, secret absent from cron.job and from the file, rotation updates in place. Hosted Supabase versions not checked.
 - F5: Caddy serves only APP_DOMAIN (no www cert), so the CANONICAL_HOST redirect can't be reached until a `www.{$APP_DOMAIN}` site block is added. The runbook says to skip www for now.
-- [x] T14 — final verification by the controller in a clean `git worktree` of e5c216a: `npm ci` 0; security-gate pass; `npm test` 80/80; authorisation-gate 176 guarded; `tsc` 0; `npm run build` 0 (preset node-server); eslint on all 14 new .ts/.mjs files + rewritten vite.config.ts/server.ts 0 errors; AC2 only allowed hits; AC9 empty; AC10 3 lines; AC1 original repo clean at 1a342e3, no `.env`/`.lovable` in the new repo; actionlint 0. Worktree removed. Docker (AC11) verified at T11; Dockerfile/compose unchanged since.
+- [x] T14 — final verification by the controller in a clean `git worktree` of e5c216a: `npm ci` 0; security-gate pass; `npm test` 80/80; authorisation-gate 176 guarded; `tsc` 0; `npm run build` 0 (preset node-server); eslint on all 14 new .ts/.mjs files + rewritten vite.config.ts/server.ts 0 errors; AC2 only allowed hits; AC9 empty; AC10 3 lines; AC1 original repo clean at 1a342e3, no `.env`/`.lovable` in the new repo; actionlint 0. Worktree removed. Docker (AC11) verified at T11; Dockerfile/compose unchanged since. **Correction (audit 2026-11-13):** the eslint count left out the moved hook routes `auth-email.ts` (79) and `email-queue.ts` (124); fixed in T18/T19 (both 0).
 
 ## Implementation summary
 14/14 tasks done on `feature/selfhost-node-docker` (`main` = verbatim import 42df455). Not verifiable here (needs real keys/infra): Google OAuth click-through, a live Anthropic call, the Resend send, the Supabase hook/cron against hosted Supabase, the GitHub Actions run + GHCR push, and the Hetzner deploy. All are in the deploy/README.md runbook.
@@ -443,3 +447,22 @@ Checks (every task): `node scripts/security-gate.mjs`, `npm test`, `node scripts
 
 ## Feasibility (follow-ups, 2026-11-13)
 Verdict: FEASIBLE. Evidence: branch `feature/selfhost-node-docker` @ 1f21d83, clean except this plan; no remote yet (GitHub repo not created), so the origin/main base check is N/A (`main` = import commit 42df455). `email_send_state.retry_after_until` exists (`supabase/migrations/20260714234418_email_infra.sql:91-93`); queues `auth_emails`, `transactional_emails` (+`_dlq`) created there (lines 17-22); the original guard body was applied via the Management API and is not in the repo, so T17 rebuilds it from the documented conditions (lines 296-302). Docker 29.1.3 and `supabase/postgres:15.19.0.006` are present for T16/T17. T20 pairing confirmed from https://supabase.com/docs/guides/auth/auth-hooks/send-email-hook ("The token hash field names are reversed due to backward compatibility"; current = `token` + `token_hash_new`, new = `token_new` + `token_hash`; secure OFF = one email to new address). Adjustment: T15 adds an alias-free sender-identity module because `email-send.server.ts:2` imports `@/integrations/supabase/client.server`.
+
+## Audit (2026-11-13, re-audit after T15-T23)
+Clean-context auditor on a `git archive` export of 7550827. Checks: `npm ci` 0; security-gate pass (5); `npm test` 204/204; authorisation-gate 176 guarded, 12 role sets unchanged; `tsc` 0; build 0 (node-server). Coverage: all files 96.69% lines / 86.29% branches. 13/13 mutations caught (old site.ts, pre-T20 hook, swapped hash pairing, auth after env check, state error ignored, duplicate guard off, 403 not DLQ, `>=`→`>` MAX_RETRIES, one-sided skew, pending-log check removed, failed row not written, enqueue error ignored, cron accepts service-role). All 8 earlier follow-ups resolved in code.
+
+| Dimension        | Score 1-5 | Evidence |
+|------------------|-----------|----------|
+| Plan adherence   | 4 | R3 `vite.config.ts`, `health.ts` (health ok, `/` 200, `/login` 307 / `-L` 200); R4 `stripe.server.ts:34-39`; R5 `email-provider.server.ts:141`, `email-queue-handler.server.ts:268-290`; R6 `auth-email-hook.ts:54-80`, `auth-email-handler.server.ts:155-251`; R7 `cron-auth.server.ts:34-50` (live 401 for none/pk/srk/apikey on all 4 hooks); R8 `sensei-llm.server.ts:34-80`; R10 404s, AC9 0 lines; R11 AC10 3 lines; R12 `id -u` 1000; AC2 allowed hits only. Deductions: stale plan text (email_change edge case, T14 lint note, baseline lint rule; all fixed in this commit); T9 Google click-through PENDING-KEYS; CI never run on GitHub (no remote). |
+| Test coverage    | 4 | 204/204; 96.69/86.29 overall; auth-email-handler 99.2/92.1, auth-email-hook 100/85.3, email-queue-handler 95.0/78.4, stripe.server 100/94.2, env/email-sender-identity/cron-auth 100/100; 13/13 mutations caught; named edge tests (`a correctly signed body that is not valid JSON is rejected with 400`, `a timestamp 301 seconds in the FUTURE is rejected with 401`, `returns 401, not 500, to an unauthenticated caller when SUPABASE_URL and RESEND_API_KEY are unset`, `moves a message with 5 failed attempts to the DLQ … still sends the decoy`). Gaps: `site.ts` branches 20% (Vite-inlined "" proven by build evidence only); cron SQL behaviour proven by manual DB runs, not CI. |
+| Error handling   | 4 | Empty `VITE_PUBLIC_SITE_URL` build inlines `envOptional("") ?? … ?? CANONICAL_ORIGIN`; signed recovery/email_change reach enqueue, 0 `Invalid URL`; Docker no-args exit 1 naming all four; F3 fixed (`email-queue-handler.server.ts:127-130`), both queues unreadable → 500 (`:375-377`). Deductions: a scheme-less site URL (`sthenos.example`) still throws `Invalid URL` at module load; a few log-write/read errors ignored (`email-queue-handler.server.ts:80-86,240-245`, `auth-email-handler.server.ts:137-143`). |
+| Security         | 4 | CRON_SECRET only, ≥16 chars, length check + `timingSafeEqual` (`cron-auth.server.ts:39-49`); HMAC constant-time ±300 s both sides (`auth-email-hook.ts:68-76,90-101`); payload shape validated; email_change pairing per Supabase docs; logs: 0 raw addresses, 0 secrets; `docker history` 0 secret matches; `ops` schema not usable by anon/authenticated. Deductions: no `webhook-id` replay dedupe; `ops.cron_job_backup` can hold old commands (possibly a service-role key) until dropped by hand; hosted Supabase grants not checked. |
+| Migrations       | 4 | No schema change. `repoint-cron.sql` now reversible: on `supabase/postgres:15.19.0.006` re-run idempotent (md5 identical), `restore-cron.sql` restores `cron.job` exactly, guard fires only with work and no cooldown, `enforce-overdue-grace` untouched, 0 secrets in `cron.job`. Deduction: a matching job with NULL `jobname` aborts the repoint (rolls back safely, but the owner is blocked). |
+
+Confidence: 4 (min of scores).
+
+Follow-ups (none mandatory; recommended):
+- [ ] Error handling: validate `VITE_PUBLIC_SITE_URL` as an http(s) URL (Dockerfile check, CI image job, and/or `site.ts` fallback with an error log); test with `sthenos.example`, shown failing first.
+- [ ] Migrations: handle NULL-`jobname` matching jobs in `repoint-cron.sql`/`restore-cron.sql` (key by jobid or stop with a clear message); prove on `supabase/postgres` with a seeded unnamed `/lovable/` job.
+- [ ] Test coverage: a test that loads a Vite-transformed `site` module with an inlined `""`.
+- [ ] Low: check the ignored log-write/read errors; dedupe `webhook-id`; treat a whitespace-only `ANTHROPIC_API_KEY` as unset (`sensei.functions.ts:665-666`).

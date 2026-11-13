@@ -7,3 +7,5 @@
 - Route files use `@/` aliases and can't be imported by `node --test`; only alias-free `src/lib/*` is unit-testable.
 - `main` = verbatim import commit 42df455; all feature work is on the branch.
 - An empty `NODE_ENV` silently selects the Stripe sandbox key.
+- Supabase Send Email Hook: for secure email_change the hash names are reversed (current = token + token_hash_new).
+- The old Lovable `process-email-queue` guard was applied via the Management API, so it is not in `supabase/migrations/`; only the comment at email_infra.sql:296 describes it.
