@@ -1,4 +1,4 @@
-import { sendEmail } from "./email-provider.server";
+import { isDomainNotVerified, sendEmail } from "./email-provider.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { PUBLIC_SITE_URL } from "./site";
 import { normaliseDomain, resolveFromLocalPart } from "./email-sender-identity.ts";
@@ -125,17 +125,7 @@ function setStatus(patch: Partial<SendingStatus>) {
   statusCache = { at: Date.now(), status: { ...current, ...patch } };
 }
 
-/** Provider responses that mean "the sending domain isn't verified yet". */
-function isDomainNotVerified(statusCode: number | null, text: string): boolean {
-  const t = text.toLowerCase();
-  return (
-    (statusCode === null || statusCode === 403 || statusCode === 400 || statusCode === 422) &&
-    (t.includes("not verified") ||
-      t.includes("domain is not") ||
-      t.includes("unverified") ||
-      t.includes("verify a domain"))
-  );
-}
+export { isDomainNotVerified };
 
 /** Plain-text fallback body, required by the email API. */
 function htmlToText(html: string): string {

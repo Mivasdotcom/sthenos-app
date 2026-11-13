@@ -176,3 +176,15 @@ export async function sendEmail(
   const json = (await res.json()) as { id: string };
   return { messageId: json.id };
 }
+
+/** Provider responses that mean "the sending domain isn't verified yet". */
+export function isDomainNotVerified(statusCode: number | null, text: string): boolean {
+  const t = text.toLowerCase();
+  return (
+    (statusCode === null || statusCode === 403 || statusCode === 400 || statusCode === 422) &&
+    (t.includes("not verified") ||
+      t.includes("domain is not") ||
+      t.includes("unverified") ||
+      t.includes("verify a domain"))
+  );
+}
