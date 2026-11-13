@@ -1,5 +1,5 @@
 # Feature: selfhost-node-docker
-Status: IMPLEMENTED
+Status: NEEDS-FOLLOW-UP
 Note (2026-10-22): /check-feasibility was skipped at the user's explicit request. T3 is where the riskiest
 assumptions (Nitro entry, node-server preset) get tested first.
 
@@ -393,3 +393,28 @@ plus `npx eslint <every file touched in the task>`. From T3 on, also run `npm ru
 ## Implementation summary
 14/14 tasks done on `feature/selfhost-node-docker` (`main` = verbatim import 42df455). Not verifiable here (needs real keys/infra): Google OAuth click-through, a live Anthropic call, the Resend send, the Supabase hook/cron against hosted Supabase, the GitHub Actions run + GHCR push, and the Hetzner deploy. All are in the deploy/README.md runbook.
 
+
+## Audit (2026-11-13)
+Clean-context auditor, run on a `git archive` export of 294cec5 (Node 24 / npm 11 locally; CI uses Node 22). Checks: `npm ci` 0; security-gate pass (5 checks); `npm test` 80/80; authorisation-gate 176 guarded, 12 role sets unchanged; `tsc` 0; `npm run build` 0 (preset node-server). Smoke: health `{"ok":true}`, `/` 200, `/login` 307, removed Lovable/MCP routes 404, cron hooks 401 for no auth/pk/srk, auth-email 400 unsigned / 401 bad sig. AC7 red-first re-confirmed (old `authorizeCron` → 5/12 fail). Docker (AC11) and actionlint (AC12) not re-run.
+
+**Critical finding (verified by controller):** an empty `VITE_PUBLIC_SITE_URL` breaks every auth/queued email. `src/lib/site.ts:16-22` falls back with `??`. `Dockerfile:17-24` (ARG→ENV with no build-arg) and `docker-compose.yml:17` (`${VITE_PUBLIC_SITE_URL:-}`) both produce `""`. Vite inlines that value: `PUBLIC_SITE_URL = (… ? "" : void 0) ?? …`. `src/lib/email-send.server.ts:15` then runs `new URL("")` when the module loads → `TypeError: Invalid URL`, so `/api/public/hooks/email-queue` returns 500 for every caller, the auth-email hook fails, and so does password reset. This is a regression from T10; the old fallback was a literal.
+
+| Dimension        | Score 1-5 | Evidence |
+|------------------|-----------|----------|
+| Plan adherence   | 3 | Traced R3 `vite.config.ts` + `.output/nitro.json` node-server; R4 `stripe.server.ts:34-38`; R5 `email-provider.server.ts:137-178`, `email-send.server.ts:643-656`, `email-queue.ts:219-240`; R6 `auth-email-hook.ts:53-79`, `hooks/auth-email.ts:59-196`; R7 `cron-auth.server.ts:14-30` used by all 4 hooks; R8 `sensei-llm.server.ts:34-80`, `sensei.functions.ts:676-681`; R9 `login.tsx:122-125`, `supabase/client.ts:22`; R10 deletions + 404s; R11 `canonical-host.ts:4-20`; R12 Dockerfile/compose/Caddyfile; R13 `ci.yml:105,164`; R14 `deploy/README.md`, CLAUDE.md. **Deviations:** `repoint-cron.sql:60-64` drops the process-email-queue guard T13.5 requires (plan not amended); `hooks/auth-email.ts` (79) and `hooks/email-queue.ts` (124) eslint errors despite baseline "every created/edited file 0 errors", and T14's "0 errors" count excluded them; AC3 says `/login` 200, actual 307 (AC not amended); T9 live Google check PENDING-KEYS. |
+| Test coverage    | 3 | 80/80; line/branch: cron-auth 100/100, email-provider 100/79.6, sensei-llm 100/95, auth-email-hook 97.9/75.5 (120-121, 128-129 uncovered), canonical-host 90/87.5, password-reset 100/100, stripe.server 37.5/83.3; all files 87.6/82.0. Gaps: no handler tests for `auth-email.ts`/`email-queue.ts`/`sendEmail` wiring (401, 403/429, enqueue-error→500 proved only by curl); no invalid-JSON, missing `user.email`, or future-skew hook tests; no empty-string env tests; no `isDomainNotVerified` test (`email-send.server.ts:135-140`). |
+| Error handling   | 2 | (1) Critical finding above. (2) `??` passes `""` through: `.env.example` ships `ANTHROPIC_MODEL=""`, `EMAIL_SENDING_LOCAL_PART=""`, `EMAIL_SENDING_DOMAIN=""` → `{"model":"","local":""}`, so Sensei sends `model:""` (API 400) and the sender becomes `@domain` (`sensei.functions.ts:678`, `email-send.server.ts:21,23`). (3) `auth-email.ts:150-155` ignores the pending `email_send_log` insert error. (4) `email-queue.ts:68-79` checks env before auth → unauthenticated 500 (inherited). F3 still open. Good: network errors mapped to type only (`email-provider.server.ts:160-164`); Sensei typed errors (`sensei-llm.server.ts:66-79`). |
+| Security         | 4 | Cron: Bearer CRON_SECRET only, length check before `timingSafeEqual`, fail-closed under 16 chars (`cron-auth.server.ts:19-29`), 12 tests red-first + live pk/srk/apikey → 401. Hook HMAC constant-time, ±300 s (`auth-email-hook.ts:67-75,89-101`). API key redacted, with a positive control in the test. No secrets in image; `.dockerignore` excludes `.env*`; actions SHA-pinned; deploy gated (`ci.yml:164`). Deductions: `email_change` with secure change ON sends `token_hash_new` to the new address (`auth-email-hook.ts:159-160`), and the Supabase pairing may be inverted (unverified against docs); no `webhook-id` dedupe (replay within 5 min → duplicate email). Every new endpoint has authz except health (public by design). |
+| Migrations       | 3 | No schema change (no diff under `supabase/migrations/`). `deploy/supabase/repoint-cron.sql` is a one-way data change: lines 53-57 unschedule every job matching `%/lovable/%`, `%/api/public/hooks/%` or the 4 names; no restore script (only the saved `cron.job` output); drops the queue guard (60-64). Idempotent and holds no secrets (verified in T13, not re-run). |
+
+Confidence: 2 (min of scores).
+
+Follow-ups (mandatory for any score <= 3):
+- [ ] Error handling: treat `""` as unset for every env/build default (`site.ts:16-28`, `email-send.server.ts:15,21,23`, `ANTHROPIC_MODEL` in `sensei.functions.ts:678`, other `process.env.X ?? default`), via `||` or an `envOr()` helper; add a test loading `email-send`/`password-reset` with `VITE_PUBLIC_SITE_URL=""` and `EMAIL_SENDING_DOMAIN=""`, shown failing on current code first.
+- [ ] Error handling: Dockerfile fails fast on empty VITE_* args (`RUN test -n "$VITE_PUBLIC_SITE_URL" …` before build), matching CI; re-run AC11 including an auth-email/email-queue request, not only health.
+- [ ] Plan adherence / Migrations: restore the process-email-queue guard in `repoint-cron.sql` (or amend the plan with the reason); add a restore section/script that re-creates jobs from saved `cron.job` output.
+- [ ] Plan adherence: bring `hooks/auth-email.ts` and `hooks/email-queue.ts` to 0 eslint errors (or amend the baseline rule to exempt moved files); correct the T14 note.
+- [ ] Plan adherence: amend AC3 to expect 307 then 200 for `/login` (or `curl -L`).
+- [ ] Test coverage: handler-level tests for `email-queue` (401 pk/srk/no auth, 429 → cooldown, 403 → DLQ) and `auth-email` (enqueue RPC error → 500), extracting handler bodies into alias-free modules.
+- [ ] Test coverage: `auth-email-hook` tests for invalid JSON, missing `user.email`, and a timestamp 301 s in the future.
+- [ ] Security: verify the `email_change` token pairing against Supabase's Send Email Hook docs with secure email change ON; support both emails or document that it must be OFF; fix the test if the assumption is wrong.
