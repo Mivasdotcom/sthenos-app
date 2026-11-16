@@ -1,0 +1,6 @@
+# Caddy obtains and renews the Let's Encrypt certificate for APP_DOMAIN automatically.
+# DNS for APP_DOMAIN must already point at this server, and ports 80/443 must be reachable.
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}

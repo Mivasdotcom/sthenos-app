@@ -116,7 +116,8 @@ function PrivacyPage() {
               <strong className="text-foreground">Supabase</strong> — database and authentication.
             </li>
             <li>
-              <strong className="text-foreground">Lovable</strong> — application hosting.
+              <strong className="text-foreground">Hetzner</strong> — application hosting, in data
+              centres in Germany.
             </li>
             <li>
               <strong className="text-foreground">Stripe</strong> — subscription billing and gym
@@ -127,7 +128,7 @@ function PrivacyPage() {
               email.
             </li>
             <li>
-              <strong className="text-foreground">AI analysis</strong> — an AI service analyses
+              <strong className="text-foreground">Anthropic</strong> — an AI service that analyses
               anonymous, aggregated statistics about a gym as a whole. No member's personal data is
               sent to it.
             </li>

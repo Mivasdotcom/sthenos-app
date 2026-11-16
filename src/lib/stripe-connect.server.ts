@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { SITE_URL } from "@/lib/site";
+import { envOptional } from "@/lib/env";
 
 /**
  * BYOK Stripe Connect client — uses the platform's own STRIPE_SECRET_KEY
@@ -12,6 +13,9 @@ import { SITE_URL } from "@/lib/site";
 
 let _client: Stripe | null = null;
 
+/** Pinned Stripe API version. Typed as string: the SDK's literal union does not include it. */
+const STRIPE_API_VERSION: string = "2026-03-25.dahlia";
+
 export function hasStripeSecret(): boolean {
   return !!process.env.STRIPE_SECRET_KEY;
 }
@@ -20,10 +24,26 @@ export function getPlatformStripe(): Stripe {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new Error("Stripe not configured");
   if (!_client) {
-    _client = new Stripe(key, { apiVersion: "2026-03-25.dahlia" as any });
+    _client = new Stripe(key, { apiVersion: STRIPE_API_VERSION as Stripe.LatestApiVersion });
   }
   return _client;
 }
+
+/** The fields read from a thrown Stripe error (`raw` holds the API body). */
+type StripeErrorLike = {
+  raw?: { message?: string; code?: string };
+  message?: string;
+  code?: string;
+};
+
+/** The period-end fields read from a subscription: item first, then subscription. */
+type PeriodEndSource =
+  | {
+      items?: { data?: { current_period_end?: number | string | null }[] };
+      current_period_end?: number | string | null;
+    }
+  | null
+  | undefined;
 
 /** Platform fee we take on each member-dues charge, in percent. */
 export {
@@ -36,12 +56,9 @@ export {
 } from "@/lib/platform-fee";
 import { PLATFORM_FEE_PERCENT } from "@/lib/platform-fee";
 
-
 /** First-of-next-month unix timestamp for `billing_cycle_anchor`. */
 export function firstOfNextMonthUnix(now: Date = new Date()): number {
-  const d = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0),
-  );
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0));
   return Math.floor(d.getTime() / 1000);
 }
 
@@ -239,8 +256,6 @@ export function planSubscriptionBilling(args: {
     };
   }
 
-
-
   const anchor = monthlyAnchorUnix(args.billingDay, args.timezone ?? "UTC", now);
   const nowSec = Math.floor(now.getTime() / 1000);
   const DAY = 86400;
@@ -248,9 +263,7 @@ export function planSubscriptionBilling(args: {
   // Length of the cycle the stub sits inside — approximate with the month
   // preceding the anchor, which is what Stripe prorates against.
   const cycleDays = 30;
-  const estimated = Math.round(
-    (args.grossCents * Math.min(daysToAnchor, cycleDays)) / cycleDays,
-  );
+  const estimated = Math.round((args.grossCents * Math.min(daysToAnchor, cycleDays)) / cycleDays);
   const minimum = minChargeCents(args.currency);
   if (estimated > 0 && estimated < minimum) {
     return {
@@ -268,10 +281,9 @@ export function planSubscriptionBilling(args: {
   };
 }
 
-
 export function getConnectErrorMessage(error: unknown): string {
   if (error && typeof error === "object") {
-    const err = error as any;
+    const err = error as StripeErrorLike;
     const msg = err.raw?.message ?? err.message;
     if (msg) return msg;
   }
@@ -293,9 +305,8 @@ export function duesRequestOptions(): Stripe.RequestOptions | undefined {
 }
 
 /** Period end of a subscription, dahlia-safe (item first, then subscription). */
-export function subscriptionPeriodEnd(sub: any): string | null {
-  const raw =
-    sub?.items?.data?.[0]?.current_period_end ?? sub?.current_period_end ?? null;
+export function subscriptionPeriodEnd(sub: PeriodEndSource): string | null {
+  const raw = sub?.items?.data?.[0]?.current_period_end ?? sub?.current_period_end ?? null;
   return raw ? new Date(Number(raw) * 1000).toISOString() : null;
 }
 
@@ -314,7 +325,7 @@ export async function getDuesSubscription(
   subscriptionId: string,
 ): Promise<DuesSubscriptionState> {
   try {
-    const sub: any = await stripe.subscriptions.retrieve(
+    const sub = await stripe.subscriptions.retrieve(
       subscriptionId,
       undefined,
       duesRequestOptions(),
@@ -325,8 +336,9 @@ export async function getDuesSubscription(
       cancelAtPeriodEnd: !!sub.cancel_at_period_end,
       currentPeriodEnd: subscriptionPeriodEnd(sub),
     };
-  } catch (err: any) {
-    const code = err?.raw?.code ?? err?.code;
+  } catch (err: unknown) {
+    const stripeErr = err as StripeErrorLike | null | undefined;
+    const code = stripeErr?.raw?.code ?? stripeErr?.code;
     if (code === "resource_missing") return { present: false };
     throw err;
   }
@@ -362,14 +374,11 @@ export async function cancelDuesSubscription(
     if (mode === "immediate") {
       await stripe.subscriptions.cancel(subscriptionId, undefined, opts);
     } else {
-      await stripe.subscriptions.update(
-        subscriptionId,
-        { cancel_at_period_end: true },
-        opts,
-      );
+      await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true }, opts);
     }
-  } catch (err: any) {
-    const code = err?.raw?.code ?? err?.code;
+  } catch (err: unknown) {
+    const stripeErr = err as StripeErrorLike | null | undefined;
+    const code = stripeErr?.raw?.code ?? stripeErr?.code;
     if (code !== "resource_missing") {
       throw new Error(
         `Stripe would not stop this subscription, so nothing was changed: ${getConnectErrorMessage(err)}`,
@@ -438,9 +447,12 @@ export async function isDuesSubscriptionEnded(
  * Verify a Stripe webhook signature (HMAC-SHA256) without depending on the
  * Stripe SDK's crypto module. Reads STRIPE_WEBHOOK_SECRET.
  */
-export async function verifyConnectWebhook(
-  req: Request,
-): Promise<{ type: string; data: { object: any }; id: string; account?: string }> {
+export async function verifyConnectWebhook(req: Request): Promise<{
+  type: string;
+  data: { object: Record<string, unknown> };
+  id: string;
+  account?: string;
+}> {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) throw new Error("STRIPE_WEBHOOK_SECRET not configured");
   const signature = req.headers.get("stripe-signature");
@@ -480,7 +492,7 @@ export async function verifyConnectWebhook(
 }
 
 export function getOrigin(): string {
-  const env = process.env.APP_URL ?? process.env.SITE_URL;
+  const env = envOptional(process.env.APP_URL) ?? envOptional(process.env.SITE_URL);
   if (env) return env.replace(/\/$/, "");
   return SITE_URL;
 }

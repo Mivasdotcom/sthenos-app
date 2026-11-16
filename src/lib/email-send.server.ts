@@ -1,6 +1,15 @@
-import { sendLovableEmail } from "@lovable.dev/email-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { isDomainNotVerified, sendEmail } from "./email-provider.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import type { Database, Json } from "@/integrations/supabase/types";
 import { PUBLIC_SITE_URL } from "./site";
+import { normaliseDomain, resolveFromLocalPart } from "./email-sender-identity.ts";
+
+/** Body of a Google DNS-over-HTTPS (`dns.google/resolve`) response. */
+type DnsJsonResponse = { Answer?: { data?: unknown }[] };
+
+/** The fields read from a thrown provider error. */
+type ProviderError = { status?: unknown; message?: unknown };
 
 /**
  * Single verified platform sending domain. Every email leaves from this
@@ -11,18 +20,10 @@ import { PUBLIC_SITE_URL } from "./site";
  * string-built by appending a subdomain, which previously produced the
  * doubled "notify@notify.sthenos.live".
  */
-function normaliseDomain(raw: string | undefined): string {
-  const value = (raw ?? "notify.sthenos.live").trim().toLowerCase();
-  // Tolerate a full address or a URL being configured by mistake.
-  const host = value.includes("@") ? value.split("@").pop()! : value.replace(/^https?:\/\//, "");
-  return host.replace(/\/.*$/, "").replace(/^\.+|\.+$/g, "");
-}
-
-export const SENDING_DOMAIN = normaliseDomain(process.env.EMAIL_SENDING_DOMAIN);
+export const SENDING_DOMAIN = normaliseDomain(process.env.EMAIL_SENDING_DOMAIN, PUBLIC_SITE_URL);
 /** Local part of the platform sender. */
-export const FROM_LOCAL_PART = (process.env.EMAIL_SENDING_LOCAL_PART ?? "noreply").trim().toLowerCase();
+export const FROM_LOCAL_PART = resolveFromLocalPart(process.env.EMAIL_SENDING_LOCAL_PART);
 export const FROM_ADDRESS = `${FROM_LOCAL_PART}@${SENDING_DOMAIN}`;
-
 
 export type SendingStatus = {
   verified: boolean;
@@ -37,7 +38,7 @@ let statusCache: { at: number; status: SendingStatus } | null = null;
 const CACHE_MS = 5 * 60_000;
 
 function apiKey(): string | undefined {
-  return process.env.LOVABLE_API_KEY;
+  return process.env.RESEND_API_KEY;
 }
 
 /**
@@ -54,8 +55,8 @@ async function dnsLooksVerified(domain: string): Promise<boolean | null> {
         { headers: { accept: "application/dns-json" } },
       );
       if (!res.ok) return null;
-      const body: any = await res.json();
-      const answers: any[] = Array.isArray(body?.Answer) ? body.Answer : [];
+      const body = (await res.json()) as DnsJsonResponse;
+      const answers = Array.isArray(body?.Answer) ? body.Answer : [];
       return answers.map((a) => String(a?.data ?? ""));
     } catch {
       return null;
@@ -119,7 +120,6 @@ export async function getSendingStatus(force = false): Promise<SendingStatus> {
   return status;
 }
 
-
 function setStatus(patch: Partial<SendingStatus>) {
   const current = statusCache?.status ?? {
     domain: SENDING_DOMAIN,
@@ -131,17 +131,7 @@ function setStatus(patch: Partial<SendingStatus>) {
   statusCache = { at: Date.now(), status: { ...current, ...patch } };
 }
 
-/** Provider responses that mean "the sending domain isn't verified yet". */
-function isDomainNotVerified(statusCode: number | null, text: string): boolean {
-  const t = text.toLowerCase();
-  return (
-    (statusCode === null || statusCode === 403 || statusCode === 400 || statusCode === 422) &&
-    (t.includes("not verified") ||
-      t.includes("domain is not") ||
-      t.includes("unverified") ||
-      t.includes("verify a domain"))
-  );
-}
+export { isDomainNotVerified };
 
 /** Plain-text fallback body, required by the email API. */
 function htmlToText(html: string): string {
@@ -160,7 +150,6 @@ function htmlToText(html: string): string {
     .trim();
 }
 
-
 export type SenderIdentity = {
   fromName: string;
   fromAddress: string;
@@ -172,7 +161,11 @@ export type SenderIdentity = {
  * They are treated as "not set" so the real defaults win.
  */
 const PLACEHOLDER_NAMES = ["your dojo", "your gym", "dojo connect", "xalarosi"];
-const PLACEHOLDER_ADDRESSES = ["onboarding@resend.dev", "you@yourgym.com", "notify@notify.sthenos.live"];
+const PLACEHOLDER_ADDRESSES = [
+  "onboarding@resend.dev",
+  "you@yourgym.com",
+  "notify@notify.sthenos.live",
+];
 
 function explicitName(value: string | null | undefined): string | null {
   const v = value?.trim();
@@ -194,10 +187,21 @@ function explicitAddress(value: string | null | undefined): string | null {
  * Defaults: the dojo's own name, and the gym OWNER's account email. A stored
  * value only wins when the owner explicitly set one (placeholders ignored).
  */
-export async function resolveSenderIdentity(supabase: any, dojoId: string): Promise<SenderIdentity> {
+export async function resolveSenderIdentity(
+  supabase: SupabaseClient<Database>,
+  dojoId: string,
+): Promise<SenderIdentity> {
   const [{ data: settings }, { data: dojo }] = await Promise.all([
-    supabase.from("email_settings").select("from_name, from_address").eq("dojo_id", dojoId).maybeSingle(),
-    supabase.from("dojos").select("name, contact_email, owner_user_id").eq("id", dojoId).maybeSingle(),
+    supabase
+      .from("email_settings")
+      .select("from_name, from_address")
+      .eq("dojo_id", dojoId)
+      .maybeSingle(),
+    supabase
+      .from("dojos")
+      .select("name, contact_email, owner_user_id")
+      .eq("id", dojoId)
+      .maybeSingle(),
   ]);
 
   // The owner's auth account email is the default reply-to.
@@ -222,7 +226,6 @@ export async function resolveSenderIdentity(supabase: any, dojoId: string): Prom
     replyTo: explicitAddress(settings?.from_address) || ownerEmail || null,
   };
 }
-
 
 /**
  * Every recipient gets a durable unsubscribe token. The provider REQUIRES an
@@ -282,8 +285,6 @@ async function unsubscribeFor(email: string): Promise<{ token: string; url: stri
   return { token, url: `${PUBLIC_SITE_URL}/unsubscribe?token=${token}` };
 }
 
-
-
 async function logSend(row: {
   messageId: string | null;
   templateName: string;
@@ -299,7 +300,7 @@ async function logSend(row: {
       recipient_email: row.recipient,
       status: row.status,
       error_message: row.error ?? null,
-      metadata: (row.metadata ?? {}) as any,
+      metadata: (row.metadata ?? {}) as Json,
     });
   } catch {
     // Logging must never break a send.
@@ -356,7 +357,7 @@ export async function suppressionFor(
     .limit(1)
     .maybeSingle();
   if (!data) return null;
-  const reason = String((data as any).reason ?? "unknown").toLowerCase();
+  const reason = String(data.reason ?? "unknown").toLowerCase();
   return { reason, blocksTransactional: !MARKETING_ONLY_SUPPRESSION_REASONS.has(reason) };
 }
 
@@ -387,7 +388,7 @@ async function inRateLimitCooldown(): Promise<boolean> {
       .select("retry_after_until")
       .limit(1)
       .maybeSingle();
-    const until = (data as any)?.retry_after_until as string | null | undefined;
+    const until = data?.retry_after_until;
     return !!until && new Date(until) > new Date();
   } catch {
     return false;
@@ -396,7 +397,7 @@ async function inRateLimitCooldown(): Promise<boolean> {
 
 /**
  * Hand a fully-composed message to the shared pgmq queue that already powers
- * auth email retries (`/lovable/email/queue/process`): backoff via the message
+ * auth email retries (the email queue worker): backoff via the message
  * visibility timeout, the `retry_after_until` throttle, a TTL, capped attempts
  * and a dead-letter queue. Nothing else needs to reimplement durability.
  */
@@ -404,7 +405,7 @@ async function enqueueForRetry(payload: Record<string, unknown>): Promise<boolea
   try {
     const { error } = await supabaseAdmin.rpc("enqueue_email", {
       queue_name: "transactional_emails",
-      payload: { ...payload, queued_at: new Date().toISOString() } as any,
+      payload: { ...payload, queued_at: new Date().toISOString() } as Json,
     });
     if (error) {
       console.error("[email] enqueue for retry failed", error);
@@ -416,7 +417,6 @@ async function enqueueForRetry(payload: Record<string, unknown>): Promise<boolea
     return false;
   }
 }
-
 
 /** Stable, filesystem/header-safe idempotency key. */
 function normaliseKey(raw: string): string {
@@ -448,11 +448,10 @@ export async function sendAppEmail(args: {
    */
   marketing?: boolean;
   sender?: SenderIdentity;
-  supabase?: any;
+  supabase?: SupabaseClient<Database>;
   memberId?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<SendResult> {
-
   const to = args.to?.trim();
   if (!to) return { ok: false, pending: false, error: "No email address on file" };
 
@@ -470,7 +469,6 @@ export async function sendAppEmail(args: {
   }
   const fromName = sender?.fromName?.trim() || "Your gym";
   const replyTo = sender?.replyTo ?? null;
-
 
   // Deterministic per-send key: stable on retry, unique per intended send.
   // Bind the provider run to its recipient. A reused business-event key can
@@ -507,7 +505,6 @@ export async function sendAppEmail(args: {
    */
   const providerPurpose = "transactional";
 
-
   const baseMeta = {
     dojo_id: args.dojoId,
     member_id: args.memberId ?? null,
@@ -521,7 +518,6 @@ export async function sendAppEmail(args: {
 
     ...(args.metadata ?? {}),
   };
-
 
   // SUPPRESSION GATE — see the policy note above. Unsubscribes block marketing
   // only; bounces/complaints block everything.
@@ -567,9 +563,9 @@ export async function sendAppEmail(args: {
   const unsubToken = unsub.token;
 
   // SINGLE FOOTER — DO NOT ADD ANOTHER, HERE OR IN ANY CALLER.
-  // The sending platform appends exactly one footer of its own ("You received
-  // this email because of an action on <from_name>") including the opt-out link
-  // built from `unsubscribe_token` below. We previously appended a second
+  // The email provider adapter (src/lib/email-provider.server.ts) appends exactly
+  // one footer ("You received this email because of an action on <from_name>")
+  // including the opt-out link built from `unsubscribe_token` below. We previously appended a second
   // marketing footer here, which is why retention/marketing emails arrived with
   // two footers and two unsubscribe links.
   //
@@ -581,8 +577,7 @@ export async function sendAppEmail(args: {
   // changes, cancellations, password resets) still gets delivered.
   const html = args.html;
 
-
-  // Exactly the shape /lovable/email/queue/process hands to the provider.
+  // Exactly the shape the email queue worker hands to the provider.
   const queueMessageId = crypto.randomUUID();
   const retryPayload: Record<string, unknown> = {
     to,
@@ -635,29 +630,23 @@ export async function sendAppEmail(args: {
     return { ok: false, pending: true, error: PENDING_MESSAGE };
   }
 
-
-
-
-
   try {
-    const res = await sendLovableEmail(
+    const res = await sendEmail(
       {
         to,
         from: `${fromName} <${FROM_ADDRESS}>`,
-        sender_domain: SENDING_DOMAIN,
         subject: args.subject,
         html,
         text: htmlToText(html),
-        label: args.templateName,
-        purpose: providerPurpose,
-        idempotency_key: idempotencyKey,
-        ...(replyTo ? { reply_to: replyTo } : {}),
-        unsubscribe_token: unsubToken,
+        replyTo: replyTo ?? undefined,
+        idempotencyKey,
+        unsubscribeUrl: `${PUBLIC_SITE_URL}/unsubscribe?token=${encodeURIComponent(unsubToken)}`,
+        tags: { label: args.templateName, purpose: providerPurpose },
       },
-      { apiKey: apiKey()!, sendUrl: process.env.LOVABLE_SEND_URL, idempotencyKey },
+      { apiKey: apiKey()! },
     );
 
-    const providerId: string | null = res?.message_id ?? null;
+    const providerId: string | null = res.messageId;
     // A successful send is proof the domain is verified.
     setStatus({ verified: true, canAttempt: true, reason: null });
     await logSend({
@@ -668,9 +657,10 @@ export async function sendAppEmail(args: {
       metadata: baseMeta,
     });
     return { ok: true, providerId };
-  } catch (e: any) {
-    const statusCode: number | null = typeof e?.status === "number" ? e.status : null;
-    const message = String(e?.message ?? "Send failed");
+  } catch (e: unknown) {
+    const err = e as ProviderError | null | undefined;
+    const statusCode: number | null = typeof err?.status === "number" ? err.status : null;
+    const message = String(err?.message ?? "Send failed");
     if (isDomainNotVerified(statusCode, message)) {
       setStatus({ verified: false, canAttempt: false, reason: "Pending domain verification." });
       await logSend({
@@ -680,11 +670,12 @@ export async function sendAppEmail(args: {
         status: "pending",
         error: message,
         metadata: { ...baseMeta, retry_subject: args.subject, retry_html: args.html },
-
       });
       return { ok: false, pending: true, error: PENDING_MESSAGE };
     }
-    const error = statusCode ? `Provider error ${statusCode}: ${message.slice(0, 300)}` : message.slice(0, 300);
+    const error = statusCode
+      ? `Provider error ${statusCode}: ${message.slice(0, 300)}`
+      : message.slice(0, 300);
     // Transient failures (429 / 5xx / network) go to the durable retry queue
     // rather than being reported as a permanent failure.
     if (isTransient(statusCode, message)) {
@@ -710,10 +701,8 @@ export async function sendAppEmail(args: {
       metadata: { ...baseMeta, retry_subject: args.subject, retry_html: args.html },
     });
     return { ok: false, pending: false, error };
-
   }
 }
-
 
 export function escapeHtml(s: string): string {
   return s

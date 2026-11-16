@@ -2,17 +2,15 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { SITE_URL } from "@/lib/site";
-import {
-  createStripeClient,
-  getStripeEnv,
-  getStripeErrorMessage,
-} from "@/lib/stripe.server";
+import { envOptional } from "@/lib/env";
+import { createStripeClient, getStripeEnv, getStripeErrorMessage } from "@/lib/stripe.server";
 
 /**
  * Platform SaaS billing — the gym (dojo) pays the platform (Sthenos) for
- * SaaS access. Runs against the platform's single Stripe account through
- * the Lovable connector gateway. Tagged with metadata.type = "platform" so
- * `/api/public/payments/webhook` (gateway webhook) can route the events.
+ * SaaS access. Runs against the platform's single Stripe account, called
+ * directly with the platform's own secret key (see stripe.server.ts). Tagged
+ * with metadata.type = "platform" so `/api/public/payments/webhook` can route
+ * the events.
  *
  * Note: member-dues charges use `payments.functions.ts` (BYOK Connect).
  */
@@ -50,7 +48,9 @@ export const createPlatformCheckoutSession = createServerFn({ method: "POST" })
       const price = prices.data[0];
 
       const origin = (
-        process.env.APP_URL ?? process.env.SITE_URL ?? SITE_URL
+        envOptional(process.env.APP_URL) ??
+        envOptional(process.env.SITE_URL) ??
+        SITE_URL
       ).replace(/\/$/, "");
       const returnPath = data.returnPath ?? "/settings/payments";
 

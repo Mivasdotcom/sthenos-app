@@ -233,7 +233,7 @@ export async function verifyTurnstile(token: string | null | undefined): Promise
     const json = (await res.json()) as { success?: boolean };
     return !!json.success;
   } catch {
-    // Cloudflare unreachable — don't lock genuine members out; limits apply.
+    // Turnstile (Cloudflare) unreachable — don't lock genuine members out; limits apply.
     return true;
   }
 }

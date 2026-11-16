@@ -1,0 +1,40 @@
+# Self-hosted stack: the app container plus a Caddy reverse proxy that terminates HTTPS.
+# Only Caddy publishes ports; the app is reachable solely through Caddy on the compose network.
+#
+# Required:  APP_DOMAIN (e.g. sthenos.live)
+# Optional:  IMAGE_TAG (default latest), GHCR_OWNER (default local)
+# Build args: VITE_* values are read from the shell environment when building the image.
+
+services:
+  app:
+    image: ghcr.io/${GHCR_OWNER:-local}/sthenos-app:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY:-}
+        VITE_SUPABASE_PROJECT_ID: ${VITE_SUPABASE_PROJECT_ID:-}
+        VITE_PUBLIC_SITE_URL: ${VITE_PUBLIC_SITE_URL:-}
+    # Runtime server secrets come from .env at container start, never from the image.
+    env_file: .env
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}

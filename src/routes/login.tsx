@@ -2,7 +2,6 @@ import { PUBLIC_SITE_URL } from "@/lib/site";
 import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/hooks/use-auth";
 import { getDojoBySlug } from "@/lib/signup.functions";
 import { toast } from "sonner";
@@ -120,16 +119,16 @@ function LoginPage() {
   const onGoogle = async () => {
     setBusy(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin },
       });
-      if (result.error) {
-        toast.error(result.error.message ?? "Google sign-in failed");
+      if (error) {
+        toast.error(error.message || "Google sign-in failed");
         setBusy(false);
         return;
       }
-      if (result.redirected) return;
-      afterAuth(intent === "register" ? "/onboarding" : returnTo);
+      // The browser is now navigating to Google; Supabase restores the session from the URL on return.
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Google sign-in failed");
       setBusy(false);

@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { canonicalHostRedirect } from "./lib/canonical-host";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -12,7 +13,7 @@ let serverEntryPromise: Promise<ServerEntry> | undefined;
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
     serverEntryPromise = import("@tanstack/react-start/server-entry").then(
-      (m) => ((m as { default?: ServerEntry }).default ?? (m as unknown as ServerEntry)),
+      (m) => (m as { default?: ServerEntry }).default ?? (m as unknown as ServerEntry),
     );
   }
   return serverEntryPromise;
@@ -66,24 +67,8 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   return brandedErrorResponse();
 }
 
-// One canonical origin: www.sthenos.live -> sthenos.live
-function canonicalHostRedirect(request: Request): Response | null {
-  let url: URL;
-  try {
-    url = new URL(request.url);
-  } catch {
-    return null;
-  }
-  if (url.hostname !== "www.sthenos.live") return null;
-  // Internal /lovable/* endpoints authenticate themselves and must never be redirected.
-  if (url.pathname.startsWith("/lovable/")) return null;
-  url.hostname = "sthenos.live";
-  return Response.redirect(url.toString(), 301);
-
-}
-
 export default {
-  async fetch(request: Request, env: unknown, ctx: unknown) {
+  async fetch(request: Request, env?: unknown, ctx?: unknown) {
     try {
       const redirected = canonicalHostRedirect(request);
       if (redirected) return redirected;
@@ -96,4 +81,3 @@ export default {
     }
   },
 };
-
